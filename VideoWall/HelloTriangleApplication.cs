@@ -41,7 +41,7 @@ public unsafe class HelloTriangleApplication
 	private KhrSurface? _khrSurface;
 	private SurfaceKHR _surface;
 
-	private PhysicalDevice _physicalDevice;
+	private VulkanPhysicalDevice? _physicalDevice;
 	private VulkanDevice? _device;
 	private VulkanQueue? _graphicsQueue;
 	private VulkanQueue? _presentQueue;
@@ -55,6 +55,7 @@ public unsafe class HelloTriangleApplication
 	private ImageView[] swapchainImageViews = Array.Empty<ImageView>();
 
 	private RenderPass renderPass;
+	private VulkanDescriptorSetLayout? descriptorSetLayout;
 	private PipelineLayout pipelineLayout;
 	private Pipeline graphicsPipeline;
 
@@ -67,7 +68,7 @@ public unsafe class HelloTriangleApplication
 	private bool framebufferResized;
 
 	private VulkanBuffer? vertexBuffer;
-	private DeviceMemory vertexBufferMemory;
+	private VulkanDeviceMemory? vertexBufferMemory;
 
 	private readonly Vertex[] vertices = {
 		new() { Position = new Vector2D<float>(0, -0.5f), Color = new Vector3D<float>(1, 1, 1) },
@@ -98,15 +99,29 @@ public unsafe class HelloTriangleApplication
 		CreateSurface();
 		PickPhysicalDevice();
 		CreateLogicalDevice();
-		CreateSwapChain();
+		CreateSwapchain();
 		CreateImageViews();
 		CreateRenderPass();
+		CreateDescriptorSetLayout();
 		CreateGraphicsPipeline();
 		CreateFramebuffers();
 		CreateCommandPool();
 		CreateVertexBuffer();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void CreateDescriptorSetLayout() {
+		DescriptorSetLayoutBindingInformation uboLayoutBinding = new() {
+			Binding = 0,
+			DescriptorType = DescriptorType.UniformBuffer,
+			DescriptorCount = 1,
+			StageFlags = ShaderStageFlags.VertexBit
+		};
+		var createInfo = new DescriptorSetLayoutCreateInformation {
+			Bindings = new[] { uboLayoutBinding }
+		};
+		descriptorSetLayout = _device!.CreateDescriptorSetLayout(createInfo);
 	}
 
 	private void CreateInstance() {
@@ -187,27 +202,27 @@ public unsafe class HelloTriangleApplication
 		_physicalDevice = devices.First(IsDeviceSuitable);
 	}
 
-	private bool IsDeviceSuitable(PhysicalDevice device) {
+	private bool IsDeviceSuitable(VulkanPhysicalDevice device) {
 		var indices = FindQueueFamilies(device);
 		var extensionsSupported = CheckDeviceExtensionSupport(device);
 
 		var swapChainAdequate = false;
 		if (extensionsSupported) {
-			var swapChainSupport = QuerySwapChainSupport(device);
+			var swapChainSupport = QuerySwapchainSupport(device);
 			swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
 		}
 		
 		return indices.IsComplete() && extensionsSupported && swapChainAdequate;
 	}
 
-	private bool CheckDeviceExtensionSupport(PhysicalDevice physicalDevice) {
-		var properties = vk.EnumerateDeviceExtensionProperties(physicalDevice);
+	private bool CheckDeviceExtensionSupport(VulkanPhysicalDevice physicalDevice) {
+		var properties = physicalDevice.EnumerateExtensionProperties();
 		var propertyNames = properties.Select(p => SilkMarshal.PtrToString((nint)p.ExtensionName)).ToList();
 		return DeviceExtensions.All(propertyNames.Contains);
 	}
 
-	private QueueFamilyIndices FindQueueFamilies(PhysicalDevice physicalDevice) {
-		var properties = vk.GetPhysicalDeviceQueueFamilyProperties(physicalDevice);
+	private QueueFamilyIndices FindQueueFamilies(VulkanPhysicalDevice physicalDevice) {
+		var properties = physicalDevice.GetQueueFamilyProperties();
 
 		var queueFamilyIndices = new QueueFamilyIndices();
 		for (uint i = 0; i < properties.Length; i++) {
@@ -216,7 +231,7 @@ public unsafe class HelloTriangleApplication
 				queueFamilyIndices.GraphicsFamily = i;
 			}
 
-			_khrSurface!.GetPhysicalDeviceSurfaceSupport(physicalDevice, i, _surface, out var supported);
+			_khrSurface!.GetPhysicalDeviceSurfaceSupport(physicalDevice.PhysicalDevice, i, _surface, out var supported);
 			if (supported) {
 				queueFamilyIndices.PresentFamily = i;
 			}
@@ -227,30 +242,30 @@ public unsafe class HelloTriangleApplication
 		return queueFamilyIndices;
 	}
 
-	public SwapChainSupportDetails QuerySwapChainSupport(PhysicalDevice physicalDevice) {
+	public SwapChainSupportDetails QuerySwapchainSupport(VulkanPhysicalDevice physicalDevice) {
 		var details = new SwapChainSupportDetails();
 
-		_khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, _surface, out details.Capabilities);
+		_khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice.PhysicalDevice, _surface, out details.Capabilities);
 
 		uint formatCount = 0;
-		_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice, _surface, ref formatCount, null);
+		_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice.PhysicalDevice, _surface, ref formatCount, null);
 		details.Formats = new SurfaceFormatKHR[formatCount];
 		fixed (SurfaceFormatKHR* formatsPointer = details.Formats) {
-			_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice, _surface, ref formatCount, formatsPointer);
+			_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice.PhysicalDevice, _surface, ref formatCount, formatsPointer);
 		}
 		
 		uint presentModesCount = 0;
-		_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice, _surface, ref presentModesCount, null);
+		_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice.PhysicalDevice, _surface, ref presentModesCount, null);
 		details.PresentModes = new PresentModeKHR[presentModesCount];
 		fixed (PresentModeKHR* presentModesPointer = details.PresentModes) {
-			_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice, _surface, ref presentModesCount, presentModesPointer);
+			_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice.PhysicalDevice, _surface, ref presentModesCount, presentModesPointer);
 		}
 
 		return details;
 	}
 
 	public void CreateLogicalDevice() {
-		var indices = FindQueueFamilies(_physicalDevice);
+		var indices = FindQueueFamilies(_physicalDevice!);
 
 		var uniqueQueueFamilies = new[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
 		uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
@@ -275,7 +290,7 @@ public unsafe class HelloTriangleApplication
 			EnabledLayerNames = ValidationLayers
 		};
 
-		_device = vk.CreateDevice(_physicalDevice, deviceCreateInfo);
+		_device = _physicalDevice!.CreateDevice(deviceCreateInfo);
 
 		_graphicsQueue = _device.GetDeviceQueue(indices.GraphicsFamily.Value, 0);
 		_presentQueue = _device.GetDeviceQueue(indices.PresentFamily.Value, 0);
@@ -292,7 +307,7 @@ public unsafe class HelloTriangleApplication
 		
 		CleanupSwapchain();
 		
-		CreateSwapChain();
+		CreateSwapchain();
 		CreateImageViews();
 		CreateFramebuffers();
 	}
@@ -307,8 +322,8 @@ public unsafe class HelloTriangleApplication
 		_khrSwapchain!.DestroySwapchain(_device!.Device, swapchain);
 	}
 
-	private void CreateSwapChain() {
-		var support = QuerySwapChainSupport(_physicalDevice);
+	private void CreateSwapchain() {
+		var support = QuerySwapchainSupport(_physicalDevice!);
 		var surfaceFormat = ChooseSwapSurfaceFormat(support.Formats);
 		var presentMode = ChooseSwapPresentMode(support.PresentModes);
 		var extent = ChooseSwapExtent(support.Capabilities);
@@ -333,7 +348,7 @@ public unsafe class HelloTriangleApplication
 			OldSwapchain = default
 		};
 
-		var indices = FindQueueFamilies(_physicalDevice);
+		var indices = FindQueueFamilies(_physicalDevice!);
 		var queueFamilyIndices = stackalloc [] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
 		if (indices.GraphicsFamily != indices.PresentFamily) {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
@@ -346,7 +361,7 @@ public unsafe class HelloTriangleApplication
 			swapchainCreateInfo.PQueueFamilyIndices = null;
 		}
 
-		_khrSwapchain = instance!.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
+		_khrSwapchain = _device!.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
 
 		if (_khrSwapchain!.CreateSwapchain(_device!.Device, swapchainCreateInfo, null, out swapchain) != Result.Success) {
 			throw new Exception("Failed to create swapchain");
@@ -557,13 +572,11 @@ public unsafe class HelloTriangleApplication
 				SampleShadingEnable = false
 			};
 
-			var pipelineLayoutInfo = new PipelineLayoutCreateInfo {
-				SType = StructureType.PipelineLayoutCreateInfo
+			var pipelineLayoutInfo = new PipelineLayoutCreateInformation {
+				SetLayouts = new[]{descriptorSetLayout!.DescriptorSetLayout}
 			};
 
-			if (vk.Vk.CreatePipelineLayout(_device!.Device, pipelineLayoutInfo, null, out pipelineLayout) != Result.Success) {
-				throw new Exception("Failed to create pipeline layout");
-			}
+			pipelineLayout = vk.Vk.CreatePipelineLayout(_device!.Device, pipelineLayoutInfo);
 
 			var dynamicStates = stackalloc[] { DynamicState.Viewport, DynamicState.Scissor };
 			var pipelineDynamicStateInfo = new PipelineDynamicStateCreateInfo {
@@ -638,7 +651,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateCommandPool() {
-		var queueFamilyIndices = FindQueueFamilies(_physicalDevice);
+		var queueFamilyIndices = FindQueueFamilies(_physicalDevice!);
 
 		var commandPoolCreateInfo = new CommandPoolCreateInfo {
 			SType = StructureType.CommandPoolCreateInfo,
@@ -652,36 +665,39 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateVertexBuffer() {
+		var size = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
+		(vertexBuffer, vertexBufferMemory) = CreateBuffer(size,
+			BufferUsageFlags.VertexBufferBit, 
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+
+		var data = vertexBufferMemory.MapMemory<Vertex>();
+		vertices.AsSpan().CopyTo(data);
+		vertexBufferMemory.UnmapMemory();
+	}
+
+	private (VulkanBuffer buffer, VulkanDeviceMemory memory) CreateBuffer(uint size, BufferUsageFlags usage, MemoryPropertyFlags properties) {
 		var bufferCreateInfo = new BufferCreateInformation {
-			Size = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length),
-			Usage = BufferUsageFlags.VertexBufferBit,
+			Size = size,
+			Usage = usage,
 			SharingMode = SharingMode.Exclusive
 		};
+		var buffer = _device!.CreateBuffer(bufferCreateInfo);
 
-		vertexBuffer = _device!.CreateBuffer(bufferCreateInfo);
+		var memoryRequirements = buffer.GetMemoryRequirements();
 
-		vk.Vk.GetBufferMemoryRequirements(_device!.Device, vertexBuffer.Buffer, out var memoryRequirements);
-
-		var allocInfo = new MemoryAllocateInfo {
-			SType = StructureType.MemoryAllocateInfo,
+		var allocInfo = new MemoryAllocateInformation {
 			AllocationSize = memoryRequirements.Size,
-			MemoryTypeIndex = FindMemoryType(memoryRequirements.MemoryTypeBits, MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit)
+			MemoryTypeIndex = FindMemoryType(memoryRequirements.MemoryTypeBits, properties)
 		};
+		var bufferMemory = _device.AllocateMemory(allocInfo);
 
-		if (vk.Vk.AllocateMemory(_device!.Device, allocInfo, null, out vertexBufferMemory) != Result.Success) {
-			throw new Exception("Failed to create Vertex Buffer memory");
-		}
-
-		vk.Vk.BindBufferMemory(_device!.Device, vertexBuffer.Buffer, vertexBufferMemory, 0);
-
-		void* data;
-		vk.Vk.MapMemory(_device!.Device, vertexBufferMemory, 0, bufferCreateInfo.Size, 0, &data);
-		vertices.AsSpan().CopyTo(new Span<Vertex>(data, vertices.Length));
-		vk.Vk.UnmapMemory(_device!.Device, vertexBufferMemory);
+		buffer.BindMemory(bufferMemory);
+		
+		return (buffer, bufferMemory);
 	}
 
 	private uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties) {
-		vk.Vk.GetPhysicalDeviceMemoryProperties(_physicalDevice, out var memoryProperties);
+		var memoryProperties = _physicalDevice!.GetMemoryProperties();
 
 		for (var i = 0; i < memoryProperties.MemoryTypeCount; i++) {
 			var memType = memoryProperties.MemoryTypes[i];
@@ -845,7 +861,6 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CleanUp() {
-		vertexBuffer!.Dispose();
 		foreach (var frame in renderFrames) {
 			vk.Vk.DestroySemaphore(_device!.Device, frame.ImageAvailableSemaphore, null);
 			vk.Vk.DestroySemaphore(_device!.Device, frame.RenderFinishedSemaphore, null);
@@ -858,9 +873,10 @@ public unsafe class HelloTriangleApplication
 		vk.Vk.DestroyRenderPass(_device!.Device, renderPass, null);
 		
 		CleanupSwapchain();
+		descriptorSetLayout!.Dispose();
 
-		vertexBuffer.Dispose();
-		vk.Vk.FreeMemory(_device!.Device, vertexBufferMemory);
+		vertexBuffer!.Dispose();
+		vertexBufferMemory!.Dispose();
 		
 		_device!.Dispose();
 		if (EnableValidationLayers) {
