@@ -19,5 +19,9 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
+    
+    <ItemGroup>
+      <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Vulkan\SilkNetConvenience.Vulkan.csproj" />
+    </ItemGroup>
 
 </Project>
