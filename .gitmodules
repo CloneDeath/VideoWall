@@ -1,3 +1,6 @@
 [submodule "External/SilkNetConvenience"]
 	path = External/SilkNetConvenience
 	url = git@github.com:CloneDeath/SilkNetConvenience.git
+[submodule "External/Illustrate"]
+	path = External/Illustrate
+	url = git@github.com:CloneDeath/Illustrate.git

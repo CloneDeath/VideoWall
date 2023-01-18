@@ -8,7 +8,6 @@ using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
-using Silk.NET.Windowing;
 using SilkNetConvenience;
 using SilkNetConvenience.CreateInfo;
 using SilkNetConvenience.CreateInfo.EXT;
@@ -31,7 +30,7 @@ public unsafe class HelloTriangleApplication
 		KhrSwapchain.ExtensionName
 	};
 
-	private IWindow? window;
+	private readonly Illustrate.Window window;
 	private VulkanContext? vk;
 
 	private VulkanInstance? instance;
@@ -76,27 +75,19 @@ public unsafe class HelloTriangleApplication
 		new() { Position = new Vector2D<float>(-0.5f, 0.5f), Color = new Vector3D<float>(0, 0, 1) }
 	};
 
-	public void Run()
-	{
-		InitWindow();
-		InitVulkan();
-		MainLoop();
-		CleanUp();
-	}
-
-	private void InitWindow()
-	{
-		var options = WindowOptions.DefaultVulkan with {
-			Size = new Vector2D<int>(WIDTH, HEIGHT),
-			Title = "Vulkan"
-		};
-
-		window = Window.Create(options);
-		window.Initialize();
+	public HelloTriangleApplication() {
+		window = new Illustrate.Window("VideoWall", WIDTH, HEIGHT);
 		if (window.VkSurface is null)
 		{
 			throw new Exception("Windowing platform doesn't support Vulkan.");
 		}
+	}
+
+	public void Run()
+	{
+		InitVulkan();
+		MainLoop();
+		CleanUp();
 	}
 
 	private void InitVulkan() {
@@ -151,7 +142,7 @@ public unsafe class HelloTriangleApplication
 	}
 	
 	private string[] GetRequiredExtensions() {
-		var glfwExtensions = window!.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
+		var glfwExtensions = window.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
 		var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
 
 		return EnableValidationLayers 
@@ -190,7 +181,7 @@ public unsafe class HelloTriangleApplication
 			throw new NotSupportedException("Could not create a KHR Surface");
 		}
 		
-		_surface = window!.VkSurface!.Create<AllocationCallbacks>(instance.Instance.ToHandle(), null).ToSurface();
+		_surface = window.VkSurface!.Create<AllocationCallbacks>(instance.Instance.ToHandle(), null).ToSurface();
 	}
 
 	private void PickPhysicalDevice() {
@@ -320,8 +311,8 @@ public unsafe class HelloTriangleApplication
 	private void RecreateSwapChain() {
 		Vector2D<int> framebufferSize;
 		do {
-			framebufferSize = window!.FramebufferSize;
-			window!.DoEvents();
+			framebufferSize = window.FramebufferSize;
+			window.DoEvents();
 		} while (framebufferSize.X == 0 || framebufferSize.Y == 0);
 
 		_device!.WaitIdle();
@@ -420,7 +411,7 @@ public unsafe class HelloTriangleApplication
 			return capabilities.CurrentExtent;
 		}
 
-		var framebufferSize = window!.FramebufferSize;
+		var framebufferSize = window.FramebufferSize;
 
 		Extent2D actualExtent = new () {
 			Width = (uint)framebufferSize.X,
@@ -827,9 +818,9 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void MainLoop() {
-		window!.Render += DrawFrame;
-		window!.Resize += _ => framebufferResized = true;
-		window!.Run();
+		window.Render += DrawFrame;
+		window.Resize += _ => framebufferResized = true;
+		window.Run();
 		_device!.WaitIdle();
 	}
 
@@ -918,7 +909,7 @@ public unsafe class HelloTriangleApplication
 		_khrSurface!.DestroySurface(instance!.Instance, _surface, null);
 		vk!.Vk.DestroyInstance(instance!.Instance);
 		vk!.Dispose();
-		window?.Dispose();
+		window.Dispose();
 	}
 	
 	private static uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, 
