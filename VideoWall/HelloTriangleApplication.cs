@@ -61,7 +61,7 @@ public unsafe class HelloTriangleApplication
 
 	private Framebuffer[] swapchainFramebuffers = Array.Empty<Framebuffer>();
 
-	private CommandPool commandPool;
+	private VulkanCommandPool? commandPool;
 	private readonly RenderFrame[] renderFrames = new RenderFrame[MaxFramesInFlight];
 	private int currentFrame;
 
@@ -653,26 +653,41 @@ public unsafe class HelloTriangleApplication
 	private void CreateCommandPool() {
 		var queueFamilyIndices = FindQueueFamilies(_physicalDevice!);
 
-		var commandPoolCreateInfo = new CommandPoolCreateInfo {
-			SType = StructureType.CommandPoolCreateInfo,
+		var commandPoolCreateInfo = new CommandPoolCreateInformation {
 			QueueFamilyIndex = queueFamilyIndices.GraphicsFamily!.Value,
 			Flags = CommandPoolCreateFlags.ResetCommandBufferBit
 		};
 
-		if (vk.Vk.CreateCommandPool(_device!.Device, commandPoolCreateInfo, null, out commandPool) != Result.Success) {
-			throw new Exception("Failed to create command pool");
-		}
+		commandPool = _device!.CreateCommandPool(commandPoolCreateInfo);
 	}
 
 	private void CreateVertexBuffer() {
-		var size = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
-		(vertexBuffer, vertexBufferMemory) = CreateBuffer(size,
-			BufferUsageFlags.VertexBufferBit, 
+		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
+		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+		
+		using (stagingBuffer)
+		using (stagingBufferMemory) {
+			var data = stagingBufferMemory.MapMemory<Vertex>();
+			vertices.AsSpan().CopyTo(data);
+			stagingBufferMemory.UnmapMemory();
+		
+			(vertexBuffer, vertexBufferMemory) = CreateBuffer(bufferSize, 
+				BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit, 
+				MemoryPropertyFlags.DeviceLocalBit);
 
-		var data = vertexBufferMemory.MapMemory<Vertex>();
-		vertices.AsSpan().CopyTo(data);
-		vertexBufferMemory.UnmapMemory();
+			CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+		}
+	}
+
+	private void CopyBuffer(VulkanBuffer source, VulkanBuffer destination, uint size) {
+		using var commandBuffer = commandPool!.AllocateCommandBuffer(CommandBufferLevel.Primary);
+		commandBuffer.Begin(CommandBufferUsageFlags.OneTimeSubmitBit);
+		commandBuffer.CopyBuffer(source, destination, size);
+		commandBuffer.End();
+
+		_graphicsQueue!.Submit(commandBuffer);
+		_graphicsQueue!.WaitIdle();
 	}
 
 	private (VulkanBuffer buffer, VulkanDeviceMemory memory) CreateBuffer(uint size, BufferUsageFlags usage, MemoryPropertyFlags properties) {
@@ -713,7 +728,7 @@ public unsafe class HelloTriangleApplication
 		var commandBuffers = stackalloc CommandBuffer[renderFrames.Length];
 		var allocInfo = new CommandBufferAllocateInfo {
 			SType = StructureType.CommandBufferAllocateInfo,
-			CommandPool = commandPool,
+			CommandPool = commandPool.CommandPool,
 			CommandBufferCount = (uint)renderFrames.Length,
 			Level = CommandBufferLevel.Primary
 		};
@@ -866,7 +881,7 @@ public unsafe class HelloTriangleApplication
 			vk.Vk.DestroySemaphore(_device!.Device, frame.RenderFinishedSemaphore, null);
 			vk.Vk.DestroyFence(_device!.Device, frame.InFlightFence, null);
 		}
-		vk.Vk.DestroyCommandPool(_device!.Device, commandPool);
+		commandPool.Dispose();
 		
 		vk.Vk.DestroyPipeline(_device!.Device, graphicsPipeline);
 		vk.Vk.DestroyPipelineLayout(_device!.Device, pipelineLayout);
