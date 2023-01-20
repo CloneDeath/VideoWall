@@ -69,11 +69,18 @@ public unsafe class HelloTriangleApplication
 
 	private VulkanBuffer? vertexBuffer;
 	private VulkanDeviceMemory? vertexBufferMemory;
+	private VulkanBuffer? indexBuffer;
+	private VulkanDeviceMemory? indexBufferMemory;
 
 	private readonly Vertex[] vertices = {
-		new() { Position = new Vector2D<float>(0, -0.5f), Color = new Vector3D<float>(1, 1, 1) },
-		new() { Position = new Vector2D<float>(0.5f, 0.5f), Color = new Vector3D<float>(0, 1, 0) },
-		new() { Position = new Vector2D<float>(-0.5f, 0.5f), Color = new Vector3D<float>(0, 0, 1) }
+		new() { Position = new Vector2D<float>(-0.5f, -0.5f), Color = new Vector3D<float>(1, 0, 0) },
+		new() { Position = new Vector2D<float>(0.5f, -0.5f), Color = new Vector3D<float>(0, 1, 0) },
+		new() { Position = new Vector2D<float>(0.5f, 0.5f), Color = new Vector3D<float>(0, 0, 1) },
+		new() { Position = new Vector2D<float>(-0.5f, 0.5f), Color = new Vector3D<float>(1, 1, 1) }
+	};
+
+	private readonly short[] indices = {
+		0, 1, 2, 2, 3, 0
 	};
 
 	public HelloTriangleApplication() {
@@ -107,6 +114,7 @@ public unsafe class HelloTriangleApplication
 		CreateFramebuffers();
 		CreateCommandPool();
 		CreateVertexBuffer();
+		CreateIndexBuffer();
 		CreateCommandBuffers();
 		CreateSyncObjects();
 	}
@@ -155,7 +163,7 @@ public unsafe class HelloTriangleApplication
 
 		instance = vk.CreateInstance(createInfo);
 	}
-	
+
 	private string[] GetRequiredExtensions() {
 		var glfwExtensions = window.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
 		var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
@@ -203,7 +211,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private bool IsDeviceSuitable(VulkanPhysicalDevice device) {
-		var indices = FindQueueFamilies(device);
+		var queueFamilyIndices = FindQueueFamilies(device);
 		var extensionsSupported = CheckDeviceExtensionSupport(device);
 
 		var swapChainAdequate = false;
@@ -212,7 +220,7 @@ public unsafe class HelloTriangleApplication
 			swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
 		}
 		
-		return indices.IsComplete() && extensionsSupported && swapChainAdequate;
+		return queueFamilyIndices.IsComplete() && extensionsSupported && swapChainAdequate;
 	}
 
 	private bool CheckDeviceExtensionSupport(VulkanPhysicalDevice physicalDevice) {
@@ -265,9 +273,9 @@ public unsafe class HelloTriangleApplication
 	}
 
 	public void CreateLogicalDevice() {
-		var indices = FindQueueFamilies(_physicalDevice!);
+		var queueFamilyIndices = FindQueueFamilies(_physicalDevice!);
 
-		var uniqueQueueFamilies = new[] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
+		var uniqueQueueFamilies = new[] { queueFamilyIndices.GraphicsFamily!.Value, queueFamilyIndices.PresentFamily!.Value };
 		uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
 
 		using var mem = GlobalMemory.Allocate(uniqueQueueFamilies.Length * sizeof(DeviceQueueCreateInfo));
@@ -292,8 +300,8 @@ public unsafe class HelloTriangleApplication
 
 		_device = _physicalDevice!.CreateDevice(deviceCreateInfo);
 
-		_graphicsQueue = _device.GetDeviceQueue(indices.GraphicsFamily.Value, 0);
-		_presentQueue = _device.GetDeviceQueue(indices.PresentFamily.Value, 0);
+		_graphicsQueue = _device.GetDeviceQueue(queueFamilyIndices.GraphicsFamily.Value, 0);
+		_presentQueue = _device.GetDeviceQueue(queueFamilyIndices.PresentFamily.Value, 0);
 	}
 
 	private void RecreateSwapChain() {
@@ -348,9 +356,9 @@ public unsafe class HelloTriangleApplication
 			OldSwapchain = default
 		};
 
-		var indices = FindQueueFamilies(_physicalDevice!);
-		var queueFamilyIndices = stackalloc [] { indices.GraphicsFamily!.Value, indices.PresentFamily!.Value };
-		if (indices.GraphicsFamily != indices.PresentFamily) {
+		var queueFamilies = FindQueueFamilies(_physicalDevice!);
+		var queueFamilyIndices = stackalloc [] { queueFamilies.GraphicsFamily!.Value, queueFamilies.PresentFamily!.Value };
+		if (queueFamilies.GraphicsFamily != queueFamilies.PresentFamily) {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
 			swapchainCreateInfo.QueueFamilyIndexCount = 2;
 			swapchainCreateInfo.PQueueFamilyIndices = queueFamilyIndices;
@@ -373,7 +381,7 @@ public unsafe class HelloTriangleApplication
 		swapchainFormat = surfaceFormat.Format;
 		swapchainExtent = extent;
 	}
-	
+
 	private SurfaceFormatKHR ChooseSwapSurfaceFormat(SurfaceFormatKHR[] availableFormats) {
 		foreach (var surfaceFormat in availableFormats) {
 			if (surfaceFormat is { Format: Format.B8G8R8A8Srgb, ColorSpace: ColorSpaceKHR.SpaceSrgbNonlinearKhr }) {
@@ -680,6 +688,26 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
+	private void CreateIndexBuffer() {
+		var bufferSize =  sizeof(short) * (uint)indices.Length;
+
+		var (stagingBuffer, stagingMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
+			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
+
+		using (stagingBuffer)
+		using (stagingMemory) {
+			var data = stagingMemory.MapMemory<short>();
+			indices.AsSpan().CopyTo(data);
+			stagingMemory.UnmapMemory();
+
+			(indexBuffer, indexBufferMemory) = CreateBuffer(bufferSize,
+				BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
+				MemoryPropertyFlags.DeviceLocalBit);
+
+			CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
+		}
+	}
+
 	private void CopyBuffer(VulkanBuffer source, VulkanBuffer destination, uint size) {
 		using var commandBuffer = commandPool!.AllocateCommandBuffer(CommandBufferLevel.Primary);
 		commandBuffer.Begin(CommandBufferUsageFlags.OneTimeSubmitBit);
@@ -725,16 +753,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateCommandBuffers() {
-		var commandBuffers = stackalloc CommandBuffer[renderFrames.Length];
-		var allocInfo = new CommandBufferAllocateInfo {
-			SType = StructureType.CommandBufferAllocateInfo,
-			CommandPool = commandPool.CommandPool,
-			CommandBufferCount = (uint)renderFrames.Length,
-			Level = CommandBufferLevel.Primary
-		};
-		if (vk.Vk.AllocateCommandBuffers(_device!.Device, allocInfo, commandBuffers) != Result.Success) {
-			throw new Exception("Failed to create command buffer");
-		}
+		var commandBuffers = commandPool!.AllocateCommandBuffers((uint)renderFrames.Length, CommandBufferLevel.Primary);
 
 		for (var i = 0; i < renderFrames.Length; i++) {
 			renderFrames[i] = new RenderFrame {
@@ -760,29 +779,24 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void RecordCommandBuffer(CommandBuffer buffer, int index) {
-		var beginInfo = new CommandBufferBeginInfo {
-			SType = StructureType.CommandBufferBeginInfo
-		};
-		if (vk.Vk.BeginCommandBuffer(buffer, beginInfo) != Result.Success) {
-			throw new Exception("Failed to begin the command buffer");
-		}
-
+	private void RecordCommandBuffer(VulkanCommandBuffer buffer, int index) {
+		buffer.Begin();
+		
 		var clearValue = new ClearValue {
 			Color = new ClearColorValue(0, 0, 0, 1)
 		};
-		var renderPassBegin = new RenderPassBeginInfo {
-			SType = StructureType.RenderPassBeginInfo,
+		var renderPassBegin = new RenderPassBeginInformation {
 			RenderPass = renderPass,
 			Framebuffer = swapchainFramebuffers[index],
 			RenderArea = new Rect2D(new Offset2D(0, 0), swapchainExtent),
-			ClearValueCount = 1,
-			PClearValues = &clearValue
+			ClearValues = new []{clearValue}
 		};
-		vk.Vk.CmdBeginRenderPass(buffer, renderPassBegin, SubpassContents.Inline);
-		vk.Vk.CmdBindPipeline(buffer, PipelineBindPoint.Graphics, graphicsPipeline);
-
-		vk.Vk.CmdBindVertexBuffers(buffer, 0, 1, vertexBuffer!.Buffer, 0);
+		
+		buffer.BeginRenderPass(renderPassBegin, SubpassContents.Inline);
+		buffer.BindPipeline(PipelineBindPoint.Graphics, graphicsPipeline);
+		
+		buffer.BindVertexBuffer(0, vertexBuffer!.Buffer);
+		buffer.BindIndexBuffer(indexBuffer!, 0, IndexType.Uint16);
 
 		var viewport = new Viewport {
 			Height = swapchainExtent.Height,
@@ -792,21 +806,19 @@ public unsafe class HelloTriangleApplication
 			MaxDepth = 1,
 			MinDepth = 0
 		};
-		vk.Vk.CmdSetViewport(buffer, 0, 1, &viewport);
+		buffer.SetViewport(0, viewport);
 
 		var scissor = new Rect2D {
 			Offset = new Offset2D(0, 0),
 			Extent = swapchainExtent
 		};
-		vk.Vk.CmdSetScissor(buffer, 0, 1, &scissor);
+		buffer.SetScissor(0, scissor);
 
-		vk.Vk.CmdDraw(buffer, (uint)vertices.Length, 1, 0, 0);
+		buffer.DrawIndexed((uint)indices.Length);
 
-		vk.Vk.CmdEndRenderPass(buffer);
+		buffer.EndRenderPass();
 
-		if (vk.Vk.EndCommandBuffer(buffer) != Result.Success) {
-			throw new Exception("Failed to end the command buffer");
-		}
+		buffer.End();
 	}
 
 	private void MainLoop() {
@@ -831,21 +843,22 @@ public unsafe class HelloTriangleApplication
 		}
 		
 		vk.Vk.ResetFences(_device!.Device, 1, frame.InFlightFence);
-		
-		vk.Vk.ResetCommandBuffer(frame.CommandBuffer, 0);
+
+		frame.CommandBuffer!.Reset();
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex);
 
 		var buffer = frame.CommandBuffer;
 		var waitSemaphores = stackalloc[] { frame.ImageAvailableSemaphore };
 		var pipelineStageFlags = stackalloc [] { PipelineStageFlags.ColorAttachmentOutputBit };
 		var signalSemaphores = stackalloc[] { frame.RenderFinishedSemaphore };
+		var commandBuffer = buffer.CommandBuffer;
 		var submitInfo = new SubmitInfo {
 			SType = StructureType.SubmitInfo,
 			WaitSemaphoreCount = 1,
 			PWaitSemaphores = waitSemaphores,
 			PWaitDstStageMask = pipelineStageFlags,
 			CommandBufferCount = 1,
-			PCommandBuffers = &buffer,
+			PCommandBuffers = &commandBuffer,
 			SignalSemaphoreCount = 1,
 			PSignalSemaphores = signalSemaphores
 		};
@@ -881,7 +894,7 @@ public unsafe class HelloTriangleApplication
 			vk.Vk.DestroySemaphore(_device!.Device, frame.RenderFinishedSemaphore, null);
 			vk.Vk.DestroyFence(_device!.Device, frame.InFlightFence, null);
 		}
-		commandPool.Dispose();
+		commandPool!.Dispose();
 		
 		vk.Vk.DestroyPipeline(_device!.Device, graphicsPipeline);
 		vk.Vk.DestroyPipelineLayout(_device!.Device, pipelineLayout);
@@ -890,6 +903,9 @@ public unsafe class HelloTriangleApplication
 		CleanupSwapchain();
 		descriptorSetLayout!.Dispose();
 
+		indexBuffer!.Dispose();
+		indexBufferMemory!.Dispose();
+		
 		vertexBuffer!.Dispose();
 		vertexBufferMemory!.Dispose();
 		
