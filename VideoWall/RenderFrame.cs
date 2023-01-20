@@ -1,3 +1,4 @@
+using System;
 using Silk.NET.Vulkan;
 using SilkNetConvenience.Wrappers;
 
@@ -11,5 +12,4 @@ public class RenderFrame {
 
 	public VulkanBuffer? UniformBuffer;
 	public VulkanDeviceMemory? UniformBufferMemory;
-	public object UniformBufferMapped;
 }

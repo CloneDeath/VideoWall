@@ -115,8 +115,21 @@ public unsafe class HelloTriangleApplication
 		CreateCommandPool();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
+		CreateUniformBuffers();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void CreateUniformBuffers() {
+		var bufferSize = (uint)sizeof(UniformBufferObject);
+
+		for (var i = 0; i < MaxFramesInFlight; i++) {
+			var frame = renderFrames[i];
+
+			(frame.UniformBuffer, frame.UniformBufferMemory) = CreateBuffer(bufferSize,
+				BufferUsageFlags.UniformBufferBit,
+				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+		}
 	}
 
 	private void CreateDescriptorSetLayout() {
@@ -847,6 +860,8 @@ public unsafe class HelloTriangleApplication
 		frame.CommandBuffer!.Reset();
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex);
 
+		UpdateUniformBuffer(currentFrame);
+
 		var buffer = frame.CommandBuffer;
 		var waitSemaphores = stackalloc[] { frame.ImageAvailableSemaphore };
 		var pipelineStageFlags = stackalloc [] { PipelineStageFlags.ColorAttachmentOutputBit };
@@ -888,6 +903,26 @@ public unsafe class HelloTriangleApplication
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
 	}
 
+	private const float Circle = 2 * MathF.PI; 
+
+	private void UpdateUniformBuffer(int frame) {
+		var timeSpan = new TimeSpan(DateTime.UtcNow.Ticks);
+		var time = (float)timeSpan.TotalSeconds;
+
+		UniformBufferObject ubo = new()
+		{
+			model = Matrix4X4<float>.Identity * Matrix4X4.CreateFromAxisAngle(new Vector3D<float>(0,0,1), time * .25f * Circle),
+			view = Matrix4X4.CreateLookAt(new Vector3D<float>(2, 2, 2), new Vector3D<float>(0, 0, 0), new Vector3D<float>(0, 0, 1)),
+			proj = Matrix4X4.CreatePerspectiveFieldOfView(.125f * Circle, swapchainExtent.Width / (float)swapchainExtent.Height, 0.1f, 10.0f),
+		};
+		ubo.proj.M22 *= -1;
+
+		var memory = renderFrames[frame].UniformBufferMemory!;
+		var data = memory.MapMemory<UniformBufferObject>(0, (uint)sizeof(UniformBufferObject));
+		data[0] = ubo;
+		memory.UnmapMemory();
+	}
+
 	private void CleanUp() {
 		foreach (var frame in renderFrames) {
 			vk.Vk.DestroySemaphore(_device!.Device, frame.ImageAvailableSemaphore, null);
@@ -901,6 +936,11 @@ public unsafe class HelloTriangleApplication
 		vk.Vk.DestroyRenderPass(_device!.Device, renderPass, null);
 		
 		CleanupSwapchain();
+		
+		foreach (var frame in renderFrames) {
+			frame.UniformBuffer!.Dispose();
+			frame.UniformBufferMemory!.Dispose();
+		}
 		descriptorSetLayout!.Dispose();
 
 		indexBuffer!.Dispose();
