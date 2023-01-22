@@ -10,8 +10,10 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using SilkNetConvenience;
 using SilkNetConvenience.CreateInfo;
+using SilkNetConvenience.CreateInfo.Barriers;
 using SilkNetConvenience.CreateInfo.EXT;
 using SilkNetConvenience.Wrappers;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace VideoWall; 
 
@@ -74,6 +76,9 @@ public unsafe class HelloTriangleApplication
 	private VulkanBuffer? indexBuffer;
 	private VulkanDeviceMemory? indexBufferMemory;
 
+	private VulkanImage? textureImage;
+	private VulkanDeviceMemory? textureImageMemory;
+
 	private readonly Vertex[] vertices = {
 		new() { Position = new Vector2D<float>(-0.5f, -0.5f), Color = new Vector3D<float>(1, 0, 0) },
 		new() { Position = new Vector2D<float>(0.5f, -0.5f), Color = new Vector3D<float>(0, 1, 0) },
@@ -119,6 +124,7 @@ public unsafe class HelloTriangleApplication
 		CreateGraphicsPipeline();
 		CreateFramebuffers();
 		CreateCommandPool();
+		CreateTextureImage();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
@@ -126,6 +132,77 @@ public unsafe class HelloTriangleApplication
 		CreateDescriptorSets();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void CreateTextureImage() {
+		var image = SixLabors.ImageSharp.Image.Load("textures/texture.jpg");
+		var imageSize = image.Width * image.Height * 4;
+
+		var (stagingBuffer, stagingBufferMemory) = CreateBuffer((uint)imageSize, BufferUsageFlags.TransferSrcBit,
+			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
+
+		var data = stagingBufferMemory.MapMemory();
+		image.CloneAs<Rgba32>().CopyPixelDataTo(data);
+		stagingBufferMemory.UnmapMemory();
+
+		(textureImage, textureImageMemory) = CreateImage((uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+			ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+			MemoryPropertyFlags.DeviceLocalBit);
+	}
+
+	private (VulkanImage image, VulkanDeviceMemory imageMemory) CreateImage(uint width, uint height, Format format,
+		ImageTiling imageTiling, ImageUsageFlags imageUsageFlags, MemoryPropertyFlags memoryPropertyFlags) {
+		
+		var imageInfo = new ImageCreateInformation {
+			ImageType = ImageType.Type2D,
+			Extent = new Extent3D {
+				Width = width,
+				Height = height,
+				Depth = 1
+			},
+			MipLevels = 1,
+			ArrayLayers = 1,
+			Format = format,
+			Tiling = imageTiling,
+			InitialLayout = ImageLayout.Undefined,
+			Usage = imageUsageFlags,
+			SharingMode = SharingMode.Exclusive,
+			Samples = SampleCountFlags.Count1Bit,
+			Flags = ImageCreateFlags.None
+		};
+
+		var image = _device!.CreateImage(imageInfo);
+		var memoryRequirements = image.GetMemoryRequirements();
+		var allocInfo = new MemoryAllocateInformation {
+			AllocationSize = memoryRequirements.Size,
+			MemoryTypeIndex = FindMemoryType(memoryRequirements.MemoryTypeBits, memoryPropertyFlags)
+		};
+		var imageMemory = _device!.AllocateMemory(allocInfo);
+		image.BindMemory(imageMemory);
+		return (image, imageMemory);
+	}
+
+	private void TransitionImageLayout(VulkanImage image, Format format, ImageLayout oldLayout, ImageLayout newLayout) {
+		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, command => {
+			var barrier = new ImageMemoryBarrierInformation {
+				OldLayout = oldLayout,
+				NewLayout = newLayout,
+				SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+				DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+				Image = image.Image,
+				SubresourceRange = new ImageSubresourceRange {
+					AspectMask = ImageAspectFlags.ColorBit,
+					BaseMipLevel = 0,
+					LevelCount = 1,
+					BaseArrayLayer = 0,
+					LayerCount = 1
+				},
+				SrcAccessMask = AccessFlags.None, // TODO
+				DstAccessMask = AccessFlags.None // TODO
+			};
+			command.PipelineBarrier(PipelineStageFlags.None, PipelineStageFlags.None,
+				DependencyFlags.None, barrier);
+		});
 	}
 
 	private void CreateDescriptorSets() {
@@ -766,13 +843,9 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CopyBuffer(VulkanBuffer source, VulkanBuffer destination, uint size) {
-		using var commandBuffer = commandPool!.AllocateCommandBuffer(CommandBufferLevel.Primary);
-		commandBuffer.Begin(CommandBufferUsageFlags.OneTimeSubmitBit);
-		commandBuffer.CopyBuffer(source, destination, size);
-		commandBuffer.End();
-
-		_graphicsQueue!.Submit(commandBuffer);
-		_graphicsQueue!.WaitIdle();
+		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, buffer => {
+			buffer.CopyBuffer(source, destination, size);
+		});
 	}
 
 	private (VulkanBuffer buffer, VulkanDeviceMemory memory) CreateBuffer(uint size, BufferUsageFlags usage, MemoryPropertyFlags properties) {
