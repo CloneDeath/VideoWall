@@ -16,7 +16,7 @@
     
     <ItemGroup>
         <None Update="**\*.spv">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>
     

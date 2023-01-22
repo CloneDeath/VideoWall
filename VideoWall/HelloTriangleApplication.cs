@@ -61,6 +61,8 @@ public unsafe class HelloTriangleApplication
 
 	private Framebuffer[] swapchainFramebuffers = Array.Empty<Framebuffer>();
 
+	private VulkanDescriptorPool? descriptorPool;
+	
 	private VulkanCommandPool? commandPool;
 	private readonly RenderFrame[] renderFrames = new RenderFrame[MaxFramesInFlight];
 	private int currentFrame;
@@ -101,6 +103,10 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void InitVulkan() {
+		for (var i = 0; i < MaxFramesInFlight; i++) {
+			renderFrames[i] = new RenderFrame();
+		}
+		
 		CreateInstance();
 		SetupDebugMessenger();
 		CreateSurface();
@@ -116,8 +122,46 @@ public unsafe class HelloTriangleApplication
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
+		CreateDescriptorPool();
+		CreateDescriptorSets();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void CreateDescriptorSets() {
+		var descriptorSets = descriptorPool!.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout!);
+		for (var i = 0; i < MaxFramesInFlight; i++) {
+			var frame = renderFrames[i];
+			frame.DescriptorSet = descriptorSets[i];
+
+			var bufferInfo = new DescriptorBufferInfo {
+				Buffer = frame.UniformBuffer!.Buffer,
+				Offset = 0,
+				Range = (uint)sizeof(UniformBufferObject)
+			};
+			var writeInfo = new WriteDescriptorSetInfo {
+				DstSet = frame.DescriptorSet.DescriptorSet,
+				DstBinding = 0,
+				DstArrayElement = 0,
+				DescriptorType = DescriptorType.UniformBuffer,
+				DescriptorCount = 1,
+				BufferInfo = new[]{bufferInfo}
+			};
+			_device!.UpdateDescriptorSets(writeInfo);
+		}
+	}
+
+	private void CreateDescriptorPool() {
+		var createInfo = new DescriptorPoolCreateInformation {
+			PoolSizes = new [] {
+				new DescriptorPoolSize {
+					Type = DescriptorType.UniformBuffer,
+					DescriptorCount = MaxFramesInFlight
+				}
+			},
+			MaxSets = MaxFramesInFlight
+		};
+		descriptorPool = _device!.CreateDescriptorPool(createInfo);
 	}
 
 	private void CreateUniformBuffers() {
@@ -566,7 +610,7 @@ public unsafe class HelloTriangleApplication
 				RasterizerDiscardEnable = false,
 				PolygonMode = PolygonMode.Fill,
 				LineWidth = 1,
-				CullMode = CullModeFlags.BackBit,
+				CullMode = CullModeFlags.None,
 				FrontFace = FrontFace.Clockwise,
 				DepthBiasEnable = false
 			};
@@ -769,9 +813,7 @@ public unsafe class HelloTriangleApplication
 		var commandBuffers = commandPool!.AllocateCommandBuffers((uint)renderFrames.Length, CommandBufferLevel.Primary);
 
 		for (var i = 0; i < renderFrames.Length; i++) {
-			renderFrames[i] = new RenderFrame {
-				CommandBuffer = commandBuffers[i]
-			};
+			renderFrames[i].CommandBuffer = commandBuffers[i];
 		}
 	}
 
@@ -827,6 +869,7 @@ public unsafe class HelloTriangleApplication
 		};
 		buffer.SetScissor(0, scissor);
 
+		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
 		buffer.DrawIndexed((uint)indices.Length);
 
 		buffer.EndRenderPass();
@@ -941,6 +984,7 @@ public unsafe class HelloTriangleApplication
 			frame.UniformBuffer!.Dispose();
 			frame.UniformBufferMemory!.Dispose();
 		}
+		descriptorPool!.Dispose();
 		descriptorSetLayout!.Dispose();
 
 		indexBuffer!.Dispose();
