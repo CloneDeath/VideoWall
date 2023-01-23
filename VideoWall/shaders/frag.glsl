@@ -1,10 +1,13 @@
 #version 450
 #pragma shader_stage(fragment)
 
-layout(location = 0) in vec3 vertexColor;
+layout(binding = 1) uniform sampler2D texSampler;
 
-layout(location = 0) out vec4 color;
+layout(location = 0) in vec3 fragColor;
+layout(location = 1) in vec2 fragTexCoord;
 
-void main(){
-    color = vec4(vertexColor, 1);
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = texture(texSampler, fragTexCoord);
 }

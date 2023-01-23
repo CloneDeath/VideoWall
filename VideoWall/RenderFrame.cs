@@ -1,4 +1,3 @@
-using System;
 using Silk.NET.Vulkan;
 using SilkNetConvenience.Wrappers;
 

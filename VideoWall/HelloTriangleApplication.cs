@@ -11,7 +11,9 @@ using Silk.NET.Vulkan.Extensions.KHR;
 using SilkNetConvenience;
 using SilkNetConvenience.CreateInfo;
 using SilkNetConvenience.CreateInfo.Barriers;
+using SilkNetConvenience.CreateInfo.Descriptors;
 using SilkNetConvenience.CreateInfo.EXT;
+using SilkNetConvenience.CreateInfo.Images;
 using SilkNetConvenience.Wrappers;
 using SixLabors.ImageSharp.PixelFormats;
 using VideoWall.Exceptions;
@@ -51,11 +53,11 @@ public unsafe class HelloTriangleApplication
 
 	private KhrSwapchain? _khrSwapchain;
 	private SwapchainKHR swapchain;
-	private Image[] swapchainImages = Array.Empty<Image>();
+	private VulkanImage[] swapchainImages = Array.Empty<VulkanImage>();
 	private Format swapchainFormat;
 	private Extent2D swapchainExtent;
 
-	private ImageView[] swapchainImageViews = Array.Empty<ImageView>();
+	private VulkanImageView[] swapchainImageViews = Array.Empty<VulkanImageView>();
 
 	private RenderPass renderPass;
 	private VulkanDescriptorSetLayout? descriptorSetLayout;
@@ -79,12 +81,30 @@ public unsafe class HelloTriangleApplication
 
 	private VulkanImage? textureImage;
 	private VulkanDeviceMemory? textureImageMemory;
+	private VulkanImageView? textureImageView;
+	private VulkanSampler? textureSampler;
 
 	private readonly Vertex[] vertices = {
-		new() { Position = new Vector2D<float>(-0.5f, -0.5f), Color = new Vector3D<float>(1, 0, 0) },
-		new() { Position = new Vector2D<float>(0.5f, -0.5f), Color = new Vector3D<float>(0, 1, 0) },
-		new() { Position = new Vector2D<float>(0.5f, 0.5f), Color = new Vector3D<float>(0, 0, 1) },
-		new() { Position = new Vector2D<float>(-0.5f, 0.5f), Color = new Vector3D<float>(1, 1, 1) }
+		new() { 
+			Position = new Vector2D<float>(-0.5f, -0.5f), 
+			Color = new Vector3D<float>(1, 0, 0),
+			TexCoord = new Vector2D<float>(1, 0)
+		},
+		new() {
+			Position = new Vector2D<float>(0.5f, -0.5f), 
+			Color = new Vector3D<float>(0, 1, 0),
+			TexCoord = new Vector2D<float>(0, 0)
+		},
+		new() {
+			Position = new Vector2D<float>(0.5f, 0.5f), 
+			Color = new Vector3D<float>(0, 0, 1),
+			TexCoord = new Vector2D<float>(0, 1)
+		},
+		new() {
+			Position = new Vector2D<float>(-0.5f, 0.5f), 
+			Color = new Vector3D<float>(1, 1, 1),
+			TexCoord = new Vector2D<float>(1, 1)
+		}
 	};
 
 	private readonly short[] indices = {
@@ -126,6 +146,8 @@ public unsafe class HelloTriangleApplication
 		CreateFramebuffers();
 		CreateCommandPool();
 		CreateTextureImage();
+		CreateTextureImageView();
+		CreateTextureSampler();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
@@ -133,6 +155,48 @@ public unsafe class HelloTriangleApplication
 		CreateDescriptorSets();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void CreateTextureSampler() {
+		var properties = _physicalDevice!.GetProperties();
+		var createInfo = new SamplerCreateInformation {
+			MinFilter = Filter.Linear,
+			MagFilter = Filter.Linear,
+			AddressModeU = SamplerAddressMode.Repeat,
+			AddressModeV = SamplerAddressMode.Repeat,
+			AddressModeW = SamplerAddressMode.Repeat,
+			AnisotropyEnable = true,
+			MaxAnisotropy = properties.Limits.MaxSamplerAnisotropy,
+			BorderColor = BorderColor.IntOpaqueBlack,
+			UnnormalizedCoordinates = false,
+			CompareEnable = false,
+			CompareOp = CompareOp.Always,
+			MipmapMode = SamplerMipmapMode.Linear,
+			MipLodBias = 0,
+			MinLod = 0,
+			MaxLod = 0
+		};
+		textureSampler = _device!.CreateSampler(createInfo);
+	}
+
+	private void CreateTextureImageView() {
+		textureImageView = CreateImageView(textureImage!, Format.R8G8B8A8Srgb);
+	}
+
+	private VulkanImageView CreateImageView(VulkanImage image, Format format) {
+		var viewInfo = new ImageViewCreateInformation {
+			Image = image.Image,
+			ViewType = ImageViewType.Type2D,
+			Format = format,
+			SubresourceRange = new ImageSubresourceRange {
+				AspectMask = ImageAspectFlags.ColorBit,
+				BaseMipLevel = 0,
+				LevelCount = 1,
+				BaseArrayLayer = 0,
+				LayerCount = 1
+			}
+		};
+		return _device!.CreateImageView(viewInfo);
 	}
 
 	private void CreateTextureImage() {
@@ -264,7 +328,12 @@ public unsafe class HelloTriangleApplication
 				Offset = 0,
 				Range = (uint)sizeof(UniformBufferObject)
 			};
-			var writeInfo = new WriteDescriptorSetInfo {
+			var imageInfo = new DescriptorImageInfo {
+				Sampler = textureSampler!.Sampler,
+				ImageView = textureImageView!.ImageView,
+				ImageLayout = ImageLayout.ShaderReadOnlyOptimal
+			};
+			var writeBufferInfo = new WriteDescriptorSetInfo {
 				DstSet = frame.DescriptorSet.DescriptorSet,
 				DstBinding = 0,
 				DstArrayElement = 0,
@@ -272,7 +341,15 @@ public unsafe class HelloTriangleApplication
 				DescriptorCount = 1,
 				BufferInfo = new[]{bufferInfo}
 			};
-			_device!.UpdateDescriptorSets(writeInfo);
+			var writeImageInfo = new WriteDescriptorSetInfo {
+				DstSet = frame.DescriptorSet.DescriptorSet,
+				DstBinding = 1,
+				DescriptorType = DescriptorType.CombinedImageSampler,
+				DescriptorCount = 1,
+				DstArrayElement = 0,
+				ImageInfo = new[]{imageInfo}
+			};
+			_device!.UpdateDescriptorSets(writeBufferInfo, writeImageInfo);
 		}
 	}
 
@@ -281,6 +358,10 @@ public unsafe class HelloTriangleApplication
 			PoolSizes = new [] {
 				new DescriptorPoolSize {
 					Type = DescriptorType.UniformBuffer,
+					DescriptorCount = MaxFramesInFlight
+				},
+				new DescriptorPoolSize {
+					Type = DescriptorType.CombinedImageSampler,
 					DescriptorCount = MaxFramesInFlight
 				}
 			},
@@ -308,8 +389,16 @@ public unsafe class HelloTriangleApplication
 			DescriptorCount = 1,
 			StageFlags = ShaderStageFlags.VertexBit
 		};
+
+		var samplerLayoutBinding = new DescriptorSetLayoutBindingInformation {
+			Binding = 1,
+			DescriptorCount = 1,
+			DescriptorType = DescriptorType.CombinedImageSampler,
+			StageFlags = ShaderStageFlags.FragmentBit
+		};
+		
 		var createInfo = new DescriptorSetLayoutCreateInformation {
-			Bindings = new[] { uboLayoutBinding }
+			Bindings = new[] { uboLayoutBinding, samplerLayoutBinding }
 		};
 		descriptorSetLayout = _device!.CreateDescriptorSetLayout(createInfo);
 	}
@@ -401,8 +490,10 @@ public unsafe class HelloTriangleApplication
 			var swapChainSupport = QuerySwapchainSupport(device);
 			swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
 		}
+
+		var supportedFeatures = device.GetFeatures();
 		
-		return queueFamilyIndices.IsComplete() && extensionsSupported && swapChainAdequate;
+		return queueFamilyIndices.IsComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.SamplerAnisotropy;
 	}
 
 	private bool CheckDeviceExtensionSupport(VulkanPhysicalDevice physicalDevice) {
@@ -471,7 +562,9 @@ public unsafe class HelloTriangleApplication
 			};
 		}
 
-		var features = new PhysicalDeviceFeatures();
+		var features = new PhysicalDeviceFeatures {
+			SamplerAnisotropy = true
+		};
 		
 		var deviceCreateInfo = new DeviceCreateInformation {
 			QueueCreateInfos = queueCreateInfos,
@@ -507,7 +600,7 @@ public unsafe class HelloTriangleApplication
 			vk.Vk.DestroyFramebuffer(_device!.Device, swapchainFramebuffer);
 		}
 		foreach (var imageView in swapchainImageViews) {
-			vk.Vk.DestroyImageView(_device!.Device, imageView);
+			imageView.Dispose();
 		}
 		_khrSwapchain!.DestroySwapchain(_device!.Device, swapchain);
 	}
@@ -557,8 +650,8 @@ public unsafe class HelloTriangleApplication
 			throw new Exception("Failed to create swapchain");
 		}
 
-		swapchainImages = Helpers.GetArray((ref uint length, Image* data) =>
-			_khrSwapchain.GetSwapchainImages(_device!.Device, swapchain, ref length, data));
+		var images = _khrSwapchain.GetSwapchainImages(_device!.Device, swapchain);
+		swapchainImages = images.Select(i => new VulkanImage(_device, i)).ToArray();
 
 		swapchainFormat = surfaceFormat.Format;
 		swapchainExtent = extent;
@@ -600,28 +693,9 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateImageViews() {
-		swapchainImageViews = new ImageView[swapchainImages.Length];
+		swapchainImageViews = new VulkanImageView[swapchainImages.Length];
 		for (var i = 0; i < swapchainImages.Length; i++) {
-			var imageViewCreateInfo = new ImageViewCreateInformation {
-				Image = swapchainImages[i],
-				ViewType = ImageViewType.Type2D,
-				Format = swapchainFormat,
-				Components = new ComponentMapping {
-					A = ComponentSwizzle.Identity,
-					R = ComponentSwizzle.Identity,
-					G = ComponentSwizzle.Identity,
-					B = ComponentSwizzle.Identity
-				},
-				SubresourceRange = new ImageSubresourceRange {
-					AspectMask = ImageAspectFlags.ColorBit,
-					BaseMipLevel = 0,
-					LayerCount = 1,
-					LevelCount = 1,
-					BaseArrayLayer = 0
-				}
-			};
-
-			swapchainImageViews[i] = vk.Vk.CreateImageView(_device!.Device, imageViewCreateInfo);
+			swapchainImageViews[i] = CreateImageView(swapchainImages[i], swapchainFormat);
 		}
 	}
 
@@ -823,7 +897,7 @@ public unsafe class HelloTriangleApplication
 		swapchainFramebuffers = new Framebuffer[swapchainImageViews.Length];
 
 		for (var i = 0; i < swapchainImageViews.Length; i++) {
-			var imageView = swapchainImageViews[i];
+			var imageView = swapchainImageViews[i].ImageView;
 			var framebufferInfo = new FramebufferCreateInfo {
 				SType = StructureType.FramebufferCreateInfo,
 				RenderPass = renderPass,
@@ -1005,7 +1079,7 @@ public unsafe class HelloTriangleApplication
 		_device!.WaitIdle();
 	}
 
-	private double currentTime = 0;
+	private double currentTime;
 
 	private void DrawFrame(double dt) {
 		currentTime += dt;
@@ -1117,6 +1191,8 @@ public unsafe class HelloTriangleApplication
 		vertexBuffer!.Dispose();
 		vertexBufferMemory!.Dispose();
 		
+		textureSampler!.Dispose();
+		textureImageView!.Dispose();
 		textureImage!.Dispose();
 		textureImageMemory!.Dispose();
 
