@@ -1005,7 +1005,11 @@ public unsafe class HelloTriangleApplication
 		_device!.WaitIdle();
 	}
 
+	private double currentTime = 0;
+
 	private void DrawFrame(double dt) {
+		currentTime += dt;
+		
 		var frame = renderFrames[currentFrame];
 		vk.Vk.WaitForFences(_device!.Device, 1, frame.InFlightFence, true, int.MaxValue);
 
@@ -1070,8 +1074,7 @@ public unsafe class HelloTriangleApplication
 	private const float Circle = 2 * MathF.PI; 
 
 	private void UpdateUniformBuffer(int frame) {
-		var timeSpan = new TimeSpan(DateTime.UtcNow.Ticks);
-		var time = (float)timeSpan.TotalSeconds;
+		var time = (float)currentTime;
 
 		UniformBufferObject ubo = new()
 		{
