@@ -14,6 +14,7 @@ using SilkNetConvenience.CreateInfo.Barriers;
 using SilkNetConvenience.CreateInfo.EXT;
 using SilkNetConvenience.Wrappers;
 using SixLabors.ImageSharp.PixelFormats;
+using VideoWall.Exceptions;
 
 namespace VideoWall; 
 
@@ -140,14 +141,23 @@ public unsafe class HelloTriangleApplication
 
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer((uint)imageSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
+		
+		using (stagingBuffer)
+		using (stagingBufferMemory) {
+			var data = stagingBufferMemory.MapMemory();
+			image.CloneAs<Rgba32>().CopyPixelDataTo(data);
+			stagingBufferMemory.UnmapMemory();
 
-		var data = stagingBufferMemory.MapMemory();
-		image.CloneAs<Rgba32>().CopyPixelDataTo(data);
-		stagingBufferMemory.UnmapMemory();
+			(textureImage, textureImageMemory) = CreateImage((uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+				ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+				MemoryPropertyFlags.DeviceLocalBit);
 
-		(textureImage, textureImageMemory) = CreateImage((uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
-			ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-			MemoryPropertyFlags.DeviceLocalBit);
+			TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
+				ImageLayout.TransferDstOptimal);
+			CopyBufferToImage(stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height);
+			TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
+				ImageLayout.ShaderReadOnlyOptimal);
+		}
 	}
 
 	private (VulkanImage image, VulkanDeviceMemory imageMemory) CreateImage(uint width, uint height, Format format,
@@ -200,8 +210,46 @@ public unsafe class HelloTriangleApplication
 				SrcAccessMask = AccessFlags.None, // TODO
 				DstAccessMask = AccessFlags.None // TODO
 			};
-			command.PipelineBarrier(PipelineStageFlags.None, PipelineStageFlags.None,
+
+			PipelineStageFlags sourceFlags;
+			PipelineStageFlags destinationFlags;
+
+			if (oldLayout == ImageLayout.Undefined && newLayout == ImageLayout.TransferDstOptimal) {
+				barrier.SrcAccessMask = AccessFlags.None;
+				barrier.DstAccessMask = AccessFlags.TransferWriteBit;
+				sourceFlags = PipelineStageFlags.TopOfPipeBit;
+				destinationFlags = PipelineStageFlags.TransferBit;
+			} else if (oldLayout == ImageLayout.TransferDstOptimal && newLayout == ImageLayout.ShaderReadOnlyOptimal) {
+				barrier.SrcAccessMask = AccessFlags.TransferWriteBit;
+				barrier.DstAccessMask = AccessFlags.ShaderReadBit;
+				sourceFlags = PipelineStageFlags.TransferBit;
+				destinationFlags = PipelineStageFlags.FragmentShaderBit;
+			}
+			else {
+				throw new NotSupportedException();
+			}
+			
+			command.PipelineBarrier(sourceFlags, destinationFlags,
 				DependencyFlags.None, barrier);
+		});
+	}
+
+	private void CopyBufferToImage(VulkanBuffer buffer, VulkanImage image, uint width, uint height) {
+		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, cmd => {
+			var region = new BufferImageCopy {
+				BufferOffset = 0,
+				BufferRowLength = 0,
+				BufferImageHeight = 0,
+				ImageSubresource = new ImageSubresourceLayers {
+					AspectMask = ImageAspectFlags.ColorBit,
+					MipLevel = 0,
+					BaseArrayLayer = 0,
+					LayerCount = 1
+				},
+				ImageOffset = new Offset3D(0, 0, 0),
+				ImageExtent = new Extent3D(width, height, 1)
+			};
+			cmd.CopyBufferToImage(buffer, image, ImageLayout.TransferDstOptimal, region);
 		});
 	}
 
@@ -1066,6 +1114,9 @@ public unsafe class HelloTriangleApplication
 		vertexBuffer!.Dispose();
 		vertexBufferMemory!.Dispose();
 		
+		textureImage!.Dispose();
+		textureImageMemory!.Dispose();
+
 		_device!.Dispose();
 		if (EnableValidationLayers) {
 			debugUtils!.DestroyDebugUtilsMessenger(instance!.Instance, debugMessenger, null);
@@ -1081,22 +1132,19 @@ public unsafe class HelloTriangleApplication
 								DebugUtilsMessageTypeFlagsEXT messageTypes, 
 								DebugUtilsMessengerCallbackDataEXT* pCallbackData, 
 								void* pUserData) {
-		var severity = messageSeverity switch {
-			DebugUtilsMessageSeverityFlagsEXT.None => "None",
-			DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt => "Error",
-			DebugUtilsMessageSeverityFlagsEXT.WarningBitExt => "Warning",
-			DebugUtilsMessageSeverityFlagsEXT.InfoBitExt => "Info",
-			DebugUtilsMessageSeverityFlagsEXT.VerboseBitExt => "Verbose",
-			_ => throw new ArgumentOutOfRangeException(nameof(messageSeverity), messageSeverity, null)
-		};
-		var type = messageTypes switch {
-			DebugUtilsMessageTypeFlagsEXT.None => "None",
-			DebugUtilsMessageTypeFlagsEXT.GeneralBitExt => "General",
-			DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt => "Performance",
-			DebugUtilsMessageTypeFlagsEXT.ValidationBitExt => "Validation",
-			_ => throw new ArgumentOutOfRangeException(nameof(messageTypes), messageTypes, null)
-		};
-		Console.WriteLine($"Vulkan {severity} {type}: " + Marshal.PtrToStringAnsi((nint)pCallbackData->PMessage));
+		var message = Marshal.PtrToStringAnsi((nint)pCallbackData->PMessage) ?? string.Empty;
+		if (messageTypes.HasFlag(DebugUtilsMessageTypeFlagsEXT.ValidationBitExt)
+		    && messageSeverity.HasFlag(DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt)) {
+			throw new ValidationErrorException(message);
+		}
+		if (messageTypes.HasFlag(DebugUtilsMessageTypeFlagsEXT.ValidationBitExt)
+		    || messageTypes.HasFlag(DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt)
+		    || messageSeverity.HasFlag(DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt)
+		    || messageSeverity.HasFlag(DebugUtilsMessageSeverityFlagsEXT.WarningBitExt)) {
+			throw new Exception(message);
+		}
+
+		Console.WriteLine($"Vulkan - " + message);
 		return Vk.False;
 	}
 }
