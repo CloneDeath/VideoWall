@@ -308,12 +308,7 @@ public unsafe class HelloTriangleApplication
 		};
 
 		var image = _device!.CreateImage(imageInfo);
-		var memoryRequirements = image.GetMemoryRequirements();
-		var allocInfo = new MemoryAllocateInformation {
-			AllocationSize = memoryRequirements.Size,
-			MemoryTypeIndex = FindMemoryType(memoryRequirements.MemoryTypeBits, memoryPropertyFlags)
-		};
-		var imageMemory = _device!.AllocateMemory(allocInfo);
+		var imageMemory = _device!.AllocateMemoryFor(image, memoryPropertyFlags);
 		image.BindMemory(imageMemory);
 		return (image, imageMemory);
 	}
@@ -1079,31 +1074,9 @@ public unsafe class HelloTriangleApplication
 			SharingMode = SharingMode.Exclusive
 		};
 		var buffer = _device!.CreateBuffer(bufferCreateInfo);
-
-		var memoryRequirements = buffer.GetMemoryRequirements();
-
-		var allocInfo = new MemoryAllocateInformation {
-			AllocationSize = memoryRequirements.Size,
-			MemoryTypeIndex = FindMemoryType(memoryRequirements.MemoryTypeBits, properties)
-		};
-		var bufferMemory = _device.AllocateMemory(allocInfo);
-
+		var bufferMemory = _device.AllocateMemoryFor(buffer, properties);
 		buffer.BindMemory(bufferMemory);
-		
 		return (buffer, bufferMemory);
-	}
-
-	private uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties) {
-		var memoryProperties = _physicalDevice!.GetMemoryProperties();
-
-		for (var i = 0; i < memoryProperties.MemoryTypeCount; i++) {
-			var memType = memoryProperties.MemoryTypes[i];
-			if ((typeFilter & (1 << i)) != 0 && (memType.PropertyFlags & properties) == properties) {
-				return (uint)i;
-			}
-		}
-
-		throw new Exception("Failed to find a suitable memory location");
 	}
 
 	private void CreateCommandBuffers() {
