@@ -13,6 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scripts", "Scripts", "{AB34
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Illustrate", "External\Illustrate\Illustrate\Illustrate.csproj", "{0E614C18-0B2B-4F93-84A3-6DF80038F0A7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SilkNetConvenience.Assimp", "External\SilkNetConvenience\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj", "{365FDBC4-1466-4C5F-BC86-8378A5B6346C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,9 +33,14 @@ Global
 		{0E614C18-0B2B-4F93-84A3-6DF80038F0A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E614C18-0B2B-4F93-84A3-6DF80038F0A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0E614C18-0B2B-4F93-84A3-6DF80038F0A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CDF5E8E7-2040-4E7B-A114-43B9C8388BED} = {B984A97D-8705-4EBB-B521-ADEF70D8F233}
 		{0E614C18-0B2B-4F93-84A3-6DF80038F0A7} = {B984A97D-8705-4EBB-B521-ADEF70D8F233}
+		{365FDBC4-1466-4C5F-BC86-8378A5B6346C} = {B984A97D-8705-4EBB-B521-ADEF70D8F233}
 	EndGlobalSection
 EndGlobal

@@ -1,15 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Silk.NET.Assimp;
 using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using SilkNetConvenience;
+using SilkNetConvenience.Assimp.Wrappers;
 using SilkNetConvenience.CreateInfo;
 using SilkNetConvenience.CreateInfo.Barriers;
 using SilkNetConvenience.CreateInfo.Descriptors;
@@ -19,6 +20,7 @@ using SilkNetConvenience.CreateInfo.Pipelines;
 using SilkNetConvenience.Wrappers;
 using SixLabors.ImageSharp.PixelFormats;
 using VideoWall.Exceptions;
+using File = System.IO.File;
 
 namespace VideoWall; 
 
@@ -27,6 +29,9 @@ public unsafe class HelloTriangleApplication
 	private const int MaxFramesInFlight = 2;
 	private const int WIDTH = 800;
 	private const int HEIGHT = 600;
+
+	private const string MODEL_PATH = "models/viking_room.obj";
+	private const string TEXTURE_PATH = "models/viking_room.png";
 
 	private readonly string[] ValidationLayers = new[] {
 		"VK_LAYER_KHRONOS_validation"
@@ -90,54 +95,8 @@ public unsafe class HelloTriangleApplication
 	private VulkanDeviceMemory? depthImageMemory;
 	private VulkanImageView? depthImageView;
 
-	private readonly Vertex[] vertices = {
-		new() { 
-			Position = new Vector3D<float>(-0.5f, -0.5f, 0), 
-			Color = new Vector3D<float>(1, 0, 0),
-			TexCoord = new Vector2D<float>(1, 0)
-		},
-		new() {
-			Position = new Vector3D<float>(0.5f, -0.5f, 0), 
-			Color = new Vector3D<float>(0, 1, 0),
-			TexCoord = new Vector2D<float>(0, 0)
-		},
-		new() {
-			Position = new Vector3D<float>(0.5f, 0.5f, 0), 
-			Color = new Vector3D<float>(0, 0, 1),
-			TexCoord = new Vector2D<float>(0, 1)
-		},
-		new() {
-			Position = new Vector3D<float>(-0.5f, 0.5f, 0), 
-			Color = new Vector3D<float>(1, 1, 1),
-			TexCoord = new Vector2D<float>(1, 1)
-		},
-		
-		new() { 
-			Position = new Vector3D<float>(-0.5f, -0.5f, -0.5f), 
-			Color = new Vector3D<float>(1, 0, 0),
-			TexCoord = new Vector2D<float>(1, 0)
-		},
-		new() {
-			Position = new Vector3D<float>(0.5f, -0.5f, -0.5f), 
-			Color = new Vector3D<float>(0, 1, 0),
-			TexCoord = new Vector2D<float>(0, 0)
-		},
-		new() {
-			Position = new Vector3D<float>(0.5f, 0.5f, -0.5f), 
-			Color = new Vector3D<float>(0, 0, 1),
-			TexCoord = new Vector2D<float>(0, 1)
-		},
-		new() {
-			Position = new Vector3D<float>(-0.5f, 0.5f, -0.5f), 
-			Color = new Vector3D<float>(1, 1, 1),
-			TexCoord = new Vector2D<float>(1, 1)
-		}
-	};
-
-	private readonly short[] indices = {
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-	};
+	private readonly List<Vertex> vertices = new();
+	private readonly List<uint> indices = new();
 
 	public HelloTriangleApplication() {
 		window = new Illustrate.Window("VideoWall", WIDTH, HEIGHT);
@@ -177,6 +136,7 @@ public unsafe class HelloTriangleApplication
 		CreateTextureImage();
 		CreateTextureImageView();
 		CreateTextureSampler();
+		LoadModel();
 		CreateVertexBuffer();
 		CreateIndexBuffer();
 		CreateUniformBuffers();
@@ -184,6 +144,45 @@ public unsafe class HelloTriangleApplication
 		CreateDescriptorSets();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+	}
+
+	private void LoadModel() {
+		using var assimp = new AssimpContext();
+		using var scene = assimp.ImportFile(MODEL_PATH, (uint)PostProcessPreset.TargetRealTimeMaximumQuality);
+		var vertexMap = new Dictionary<Vertex, uint>();
+		VisitSceneNode(vertexMap, scene.RootNode);
+	}
+
+	private void VisitSceneNode(IDictionary<Vertex, uint> vertexMap, AssimpNode node) {
+		foreach (var mesh in node.Meshes) {
+			foreach (var face in mesh.Faces) {
+				foreach (var index in face.Indices) {
+					var position = mesh.Vertices[index];
+					var texture = mesh.TextureCoords[0][(int)index];
+
+					var vertex = new Vertex
+					{
+						Position = new Vector3D<float>(position.X, position.Y, position.Z),
+						Color = new Vector3D<float>(1, 1, 1),
+						//Flip Y for OBJ in Vulkan
+						TexCoord = new Vector2D<float>(texture.X, 1.0f - texture.Y)
+					};
+
+					if (vertexMap.TryGetValue(vertex, out var meshIndex)) {
+						indices.Add(meshIndex);
+					}
+					else {
+						indices.Add((uint)vertices.Count);
+						vertexMap[vertex] = (uint)vertices.Count;
+						vertices.Add(vertex);
+					}                        
+				}
+			}
+		}
+
+		foreach (var child in node.Children) {
+			VisitSceneNode(vertexMap, child);
+		}
 	}
 
 	private void CreateDepthResources() {
@@ -263,7 +262,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateTextureImage() {
-		var image = SixLabors.ImageSharp.Image.Load("textures/texture.jpg");
+		var image = SixLabors.ImageSharp.Image.Load(TEXTURE_PATH);
 		var imageSize = image.Width * image.Height * 4;
 
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer((uint)imageSize, BufferUsageFlags.TransferSrcBit,
@@ -907,7 +906,7 @@ public unsafe class HelloTriangleApplication
 				RasterizerDiscardEnable = false,
 				PolygonMode = PolygonMode.Fill,
 				LineWidth = 1,
-				CullMode = CullModeFlags.None,
+				CullMode = CullModeFlags.FrontBit,
 				FrontFace = FrontFace.Clockwise,
 				DepthBiasEnable = false
 			};
@@ -1029,14 +1028,14 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateVertexBuffer() {
-		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
+		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Count);
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		
 		using (stagingBuffer)
 		using (stagingBufferMemory) {
 			var data = stagingBufferMemory.MapMemory<Vertex>();
-			vertices.AsSpan().CopyTo(data);
+			vertices.ToArray().AsSpan().CopyTo(data);
 			stagingBufferMemory.UnmapMemory();
 		
 			(vertexBuffer, vertexBufferMemory) = CreateBuffer(bufferSize, 
@@ -1048,15 +1047,15 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateIndexBuffer() {
-		var bufferSize =  sizeof(short) * (uint)indices.Length;
+		var bufferSize =  sizeof(int) * (uint)indices.Count;
 
 		var (stagingBuffer, stagingMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
 
 		using (stagingBuffer)
 		using (stagingMemory) {
-			var data = stagingMemory.MapMemory<short>();
-			indices.AsSpan().CopyTo(data);
+			var data = stagingMemory.MapMemory<uint>();
+			indices.ToArray().AsSpan().CopyTo(data);
 			stagingMemory.UnmapMemory();
 
 			(indexBuffer, indexBufferMemory) = CreateBuffer(bufferSize,
@@ -1152,7 +1151,7 @@ public unsafe class HelloTriangleApplication
 		buffer.BindPipeline(PipelineBindPoint.Graphics, graphicsPipeline);
 		
 		buffer.BindVertexBuffer(0, vertexBuffer!.Buffer);
-		buffer.BindIndexBuffer(indexBuffer!, 0, IndexType.Uint16);
+		buffer.BindIndexBuffer(indexBuffer!, 0, IndexType.Uint32);
 
 		var viewport = new Viewport {
 			Height = swapchainExtent.Height,
@@ -1171,7 +1170,7 @@ public unsafe class HelloTriangleApplication
 		buffer.SetScissor(0, scissor);
 
 		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
-		buffer.DrawIndexed((uint)indices.Length);
+		buffer.DrawIndexed((uint)indices.Count);
 
 		buffer.EndRenderPass();
 

@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="Silk.NET.Assimp" Version="2.16.0" />
       <PackageReference Include="Silk.NET.Vulkan" Version="2.16.0" />
       <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.16.0" />
       <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.16.0" />
@@ -22,10 +23,18 @@
         <None Update="**\*.jpg">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="**\*.png">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="**\*.obj">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
     
     <ItemGroup>
       <ProjectReference Include="..\External\Illustrate\Illustrate\Illustrate.csproj" />
+      <ProjectReference Include="..\External\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj" />
+      <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj" />
       <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Vulkan\SilkNetConvenience.Vulkan.csproj" />
     </ItemGroup>
 
