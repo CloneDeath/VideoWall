@@ -6,7 +6,7 @@ using Silk.NET.Vulkan;
 namespace VideoWall; 
 
 public struct Vertex {
-	public Vector2D<float> Position;
+	public Vector3D<float> Position;
 	public Vector3D<float> Color;
 	public Vector2D<float> TexCoord;
 
@@ -23,7 +23,7 @@ public struct Vertex {
 			new VertexInputAttributeDescription {
 				Binding = 0,
 				Location = 0,
-				Format = Format.R32G32Sfloat,
+				Format = Format.R32G32B32Sfloat,
 				Offset = (uint)Marshal.OffsetOf<Vertex>(nameof(Position))
 			},
 			new VertexInputAttributeDescription {
