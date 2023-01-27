@@ -55,7 +55,7 @@ public unsafe class HelloTriangleApplication
 
 	private KhrSwapchain? _khrSwapchain;
 	private SwapchainKHR swapchain;
-	private VulkanImage[] swapchainImages = Array.Empty<VulkanImage>();
+	private VulkanSwapchainImage[] swapchainImages = Array.Empty<VulkanSwapchainImage>();
 	private Format swapchainFormat;
 	private Extent2D swapchainExtent;
 
