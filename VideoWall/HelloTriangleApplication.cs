@@ -1115,19 +1115,10 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateSyncObjects() {
-		var semaphoreInfo = new SemaphoreCreateInfo {
-			SType = StructureType.SemaphoreCreateInfo
-		};
-		var fenceInfo = new FenceCreateInfo {
-			SType = StructureType.FenceCreateInfo,
-			Flags = FenceCreateFlags.SignaledBit
-		};
 		foreach (var frame in renderFrames) {
-			if (vk.Vk.CreateSemaphore(_device!.Device, semaphoreInfo, null, out frame.ImageAvailableSemaphore) != Result.Success
-			    || vk.Vk.CreateSemaphore(_device!.Device, semaphoreInfo, null, out frame.RenderFinishedSemaphore) != Result.Success
-			    || vk.Vk.CreateFence(_device!.Device, fenceInfo, null, out frame.InFlightFence) != Result.Success) {
-				throw new Exception("Failed to create sync objects");
-			}
+			frame.ImageAvailableSemaphore = _device!.CreateSemaphore();
+			frame.RenderFinishedSemaphore = _device!.CreateSemaphore();
+			frame.InFlightFence = _device.CreateFence(FenceCreateFlags.SignaledBit);
 		}
 	}
 
@@ -1190,10 +1181,10 @@ public unsafe class HelloTriangleApplication
 		currentTime += dt;
 		
 		var frame = renderFrames[currentFrame];
-		vk.Vk.WaitForFences(_device!.Device, 1, frame.InFlightFence, true, int.MaxValue);
+		frame.InFlightFence!.Wait();
 
 		uint imageIndex = 0;
-		var acquireResult = _khrSwapchain!.AcquireNextImage(_device!.Device, swapchain, int.MaxValue, frame.ImageAvailableSemaphore, default, ref imageIndex);
+		var acquireResult = _khrSwapchain!.AcquireNextImage(_device!.Device, swapchain, int.MaxValue, frame.ImageAvailableSemaphore!.Semaphore, default, ref imageIndex);
 		if (acquireResult == Result.ErrorOutOfDateKhr) {
 			RecreateSwapChain();
 			return;
@@ -1201,8 +1192,8 @@ public unsafe class HelloTriangleApplication
 		if (acquireResult != Result.Success && acquireResult != Result.SuboptimalKhr) {
 			throw new Exception("failed to acquire next image");
 		}
-		
-		vk.Vk.ResetFences(_device!.Device, 1, frame.InFlightFence);
+
+		frame.InFlightFence.Reset();
 
 		frame.CommandBuffer!.Reset();
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex);
@@ -1210,24 +1201,14 @@ public unsafe class HelloTriangleApplication
 		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;
-		var waitSemaphores = stackalloc[] { frame.ImageAvailableSemaphore };
-		var pipelineStageFlags = stackalloc [] { PipelineStageFlags.ColorAttachmentOutputBit };
-		var signalSemaphores = stackalloc[] { frame.RenderFinishedSemaphore };
-		var commandBuffer = buffer.CommandBuffer;
-		var submitInfo = new SubmitInfo {
-			SType = StructureType.SubmitInfo,
-			WaitSemaphoreCount = 1,
-			PWaitSemaphores = waitSemaphores,
-			PWaitDstStageMask = pipelineStageFlags,
-			CommandBufferCount = 1,
-			PCommandBuffers = &commandBuffer,
-			SignalSemaphoreCount = 1,
-			PSignalSemaphores = signalSemaphores
-		};
+		var signalSemaphores = stackalloc[] { frame.RenderFinishedSemaphore!.Semaphore };
 
-		if (vk.Vk.QueueSubmit(_graphicsQueue!.Queue, 1, submitInfo, frame.InFlightFence) != Result.Success) {
-			throw new Exception("Failed to submit queue");
-		}
+		_graphicsQueue!.Submit(new SubmitInformation {
+			WaitSemaphores = new[]{ frame.ImageAvailableSemaphore!.Semaphore },
+			SignalSemaphores = new[]{frame.RenderFinishedSemaphore!.Semaphore},
+			CommandBuffers = new[]{buffer.CommandBuffer},
+			WaitDstStageMask = new[] { PipelineStageFlags.ColorAttachmentOutputBit }
+		}, frame.InFlightFence);
 
 		var swapchains = stackalloc [] { swapchain };
 		var presentInfo = new PresentInfoKHR {
@@ -1238,7 +1219,7 @@ public unsafe class HelloTriangleApplication
 			PSwapchains = swapchains,
 			PImageIndices = &imageIndex
 		};
-		var presentResult = _khrSwapchain.QueuePresent(_presentQueue!.Queue, presentInfo);
+		var presentResult = _khrSwapchain!.QueuePresent(_presentQueue!.Queue, presentInfo);
 		if (presentResult is Result.ErrorOutOfDateKhr or Result.SuboptimalKhr || framebufferResized) {
 			framebufferResized = false;
 			RecreateSwapChain();
@@ -1276,9 +1257,9 @@ public unsafe class HelloTriangleApplication
 
 	private void CleanUp() {
 		foreach (var frame in renderFrames) {
-			vk.Vk.DestroySemaphore(_device!.Device, frame.ImageAvailableSemaphore, null);
-			vk.Vk.DestroySemaphore(_device!.Device, frame.RenderFinishedSemaphore, null);
-			vk.Vk.DestroyFence(_device!.Device, frame.InFlightFence, null);
+			frame.ImageAvailableSemaphore!.Dispose();
+			frame.RenderFinishedSemaphore!.Dispose();
+			frame.InFlightFence!.Dispose();
 		}
 		commandPool!.Dispose();
 		
