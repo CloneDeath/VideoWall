@@ -38,14 +38,12 @@ public unsafe class HelloTriangleApplication
 	};
 	public bool EnableValidationLayers = true;
 
-	private readonly string[] DeviceExtensions = new[] {
+	private readonly string[] DeviceExtensions = {
 		KhrSwapchain.ExtensionName
 	};
 
 	private readonly Illustrate.Window window;
 	private readonly VulkanContext vk;
-
-	private VulkanInstance? instance;
 	
 	private ExtDebugUtils? debugUtils;
 	private DebugUtilsMessengerEXT debugMessenger;
@@ -110,20 +108,20 @@ public unsafe class HelloTriangleApplication
 
 	public void Run()
 	{
-		InitVulkan();
+		var instance = InitVulkan();
 		MainLoop();
-		CleanUp();
+		CleanUp(instance);
 	}
 
-	private void InitVulkan() {
+	private VulkanInstance InitVulkan() {
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			renderFrames[i] = new RenderFrame();
 		}
 		
-		CreateInstance();
-		SetupDebugMessenger();
-		CreateSurface();
-		PickPhysicalDevice();
+		var instance = CreateInstance();
+		SetupDebugMessenger(instance);
+		CreateSurface(instance);
+		PickPhysicalDevice(instance);
 		CreateLogicalDevice();
 		CreateSwapchain();
 		CreateImageViews();
@@ -144,6 +142,8 @@ public unsafe class HelloTriangleApplication
 		CreateDescriptorSets();
 		CreateCommandBuffers();
 		CreateSyncObjects();
+
+		return instance;
 	}
 
 	private void LoadModel() {
@@ -474,7 +474,7 @@ public unsafe class HelloTriangleApplication
 		descriptorSetLayout = _device!.CreateDescriptorSetLayout(createInfo);
 	}
 
-	private void CreateInstance() {
+	private VulkanInstance CreateInstance() {
 		if (EnableValidationLayers && !CheckValidationLayerSupport()) {
 			throw new Exception("Validation layers not found");
 		}
@@ -503,7 +503,7 @@ public unsafe class HelloTriangleApplication
 			createInfo.EnabledLayerNames = Array.Empty<string>();
 		}
 
-		instance = vk.CreateInstance(createInfo);
+		return vk.CreateInstance(createInfo);
 	}
 
 	private string[] GetRequiredExtensions() {
@@ -521,16 +521,16 @@ public unsafe class HelloTriangleApplication
 		return ValidationLayers.All(availableLayerNames.Contains);
 	}
 
-	private void SetupDebugMessenger() {
+	private void SetupDebugMessenger(VulkanInstance instance) {
 		if (!EnableValidationLayers) return;
 
-		debugUtils = instance!.GetDebugUtilsExtension();
+		debugUtils = instance.GetDebugUtilsExtension();
 		if (debugUtils == null) return;
 		
 		var createInfo = new DebugUtilsMessengerCreateInformation();
 		PopulateDebugMessengerCreateInfo(ref createInfo);
 
-		debugMessenger = debugUtils!.CreateDebugUtilsMessenger(instance!.Instance, createInfo);
+		debugMessenger = debugUtils!.CreateDebugUtilsMessenger(instance.Instance, createInfo);
 	}
 
 	private static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
@@ -542,13 +542,13 @@ public unsafe class HelloTriangleApplication
 		createInfo.PfnUserCallback = (DebugUtilsMessengerCallbackFunctionEXT)DebugCallback;
 	}
 
-	private void CreateSurface() {
-		_khrSurface = instance!.GetKhrSurfaceExtension() ?? throw new NotSupportedException("Could not create a KHR Surface");
+	private void CreateSurface(VulkanInstance instance) {
+		_khrSurface = instance.GetKhrSurfaceExtension() ?? throw new NotSupportedException("Could not create a KHR Surface");
 		_surface = window.VkSurface!.Create<AllocationCallbacks>(instance.Instance.ToHandle(), null).ToSurface();
 	}
 
-	private void PickPhysicalDevice() {
-		var devices = instance!.EnumeratePhysicalDevices();
+	private void PickPhysicalDevice(VulkanInstance instance) {
+		var devices = instance.EnumeratePhysicalDevices();
 		_physicalDevice = devices.First(IsDeviceSuitable);
 	}
 
@@ -1228,7 +1228,7 @@ public unsafe class HelloTriangleApplication
 		memory.UnmapMemory();
 	}
 
-	private void CleanUp() {
+	private void CleanUp(VulkanInstance instance) {
 		foreach (var frame in renderFrames) {
 			frame.ImageAvailableSemaphore!.Dispose();
 			frame.RenderFinishedSemaphore!.Dispose();
@@ -1262,11 +1262,11 @@ public unsafe class HelloTriangleApplication
 
 		_device!.Dispose();
 		if (EnableValidationLayers) {
-			debugUtils!.DestroyDebugUtilsMessenger(instance!.Instance, debugMessenger, null);
+			debugUtils!.DestroyDebugUtilsMessenger(instance.Instance, debugMessenger, null);
 		}
 
-		_khrSurface!.DestroySurface(instance!.Instance, _surface, null);
-		vk.Vk.DestroyInstance(instance!.Instance);
+		_khrSurface!.DestroySurface(instance.Instance, _surface, null);
+		instance.Dispose();
 		vk.Dispose();
 		window.Dispose();
 	}
