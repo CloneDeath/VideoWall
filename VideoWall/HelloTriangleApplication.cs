@@ -58,11 +58,6 @@ public unsafe class HelloTriangleApplication
 	private VulkanKhrSurface? _khrSurface;
 	private VulkanSurface? _surface;
 
-	private VulkanPhysicalDevice? _physicalDevice;
-	private VulkanDevice? _device;
-	private VulkanQueue? _graphicsQueue;
-	private VulkanQueue? _presentQueue;
-
 	private VulkanKhrSwapchain? _khrSwapchain;
 	private VulkanSwapchain? swapchain;
 	private VulkanSwapchainImage[] swapchainImages = Array.Empty<VulkanSwapchainImage>();
@@ -112,12 +107,12 @@ public unsafe class HelloTriangleApplication
 
 	public void Run()
 	{
-		var instance = InitVulkan();
-		MainLoop();
+		var (instance, physicalDevice, device, graphicsQueue, presentQueue) = InitVulkan();
+		MainLoop(physicalDevice, device, graphicsQueue, presentQueue);
 		CleanUp(instance);
 	}
 
-	private VulkanInstance InitVulkan() {
+	private (VulkanInstance, VulkanPhysicalDevice, VulkanDevice, VulkanQueue graphicsQueue, VulkanQueue presentQueue) InitVulkan() {
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			renderFrames[i] = new RenderFrame();
 		}
@@ -125,29 +120,31 @@ public unsafe class HelloTriangleApplication
 		var instance = CreateInstance();
 		SetupDebugMessenger(instance);
 		CreateSurface(instance);
-		PickPhysicalDevice(instance);
-		CreateLogicalDevice();
-		CreateSwapchain();
-		CreateImageViews();
-		CreateRenderPass();
-		CreateDescriptorSetLayout();
-		CreateGraphicsPipeline();
-		CreateCommandPool();
-		CreateDepthResources();
-		CreateFramebuffers();
-		CreateTextureImage();
-		CreateTextureImageView();
-		CreateTextureSampler();
+		var physicalDevice = PickPhysicalDevice(instance);
+		var device = CreateLogicalDevice(physicalDevice);
+		var graphicsQueue = GetGraphicsQueue(physicalDevice, device);
+		var presentQueue = GetPresentQueue(physicalDevice, device);
+		CreateSwapchain(physicalDevice, device);
+		CreateImageViews(device);
+		CreateRenderPass(physicalDevice, device);
+		CreateDescriptorSetLayout(device);
+		CreateGraphicsPipeline(device);
+		CreateCommandPool(physicalDevice, device);
+		CreateDepthResources(physicalDevice, device, graphicsQueue);
+		CreateFramebuffers(device);
+		CreateTextureImage(device, graphicsQueue);
+		CreateTextureImageView(device);
+		CreateTextureSampler(physicalDevice, device);
 		LoadModel();
-		CreateVertexBuffer();
-		CreateIndexBuffer();
-		CreateUniformBuffers();
-		CreateDescriptorPool();
-		CreateDescriptorSets();
+		CreateVertexBuffer(device, graphicsQueue);
+		CreateIndexBuffer(device, graphicsQueue);
+		CreateUniformBuffers(device);
+		CreateDescriptorPool(device);
+		CreateDescriptorSets(device);
 		CreateCommandBuffers();
-		CreateSyncObjects();
+		CreateSyncObjects(device);
 
-		return instance;
+		return (instance, physicalDevice, device, graphicsQueue, presentQueue);
 	}
 
 	private void LoadModel() {
@@ -189,13 +186,13 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void CreateDepthResources() {
-		var depthFormat = FindDepthFormat();
-		(depthImage, depthImageMemory) = CreateImage(swapchainExtent.Width, swapchainExtent.Height, depthFormat, ImageTiling.Optimal,
+	private void CreateDepthResources(VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue) {
+		var depthFormat = FindDepthFormat(physicalDevice);
+		(depthImage, depthImageMemory) = CreateImage(device, swapchainExtent.Width, swapchainExtent.Height, depthFormat, ImageTiling.Optimal,
 			ImageUsageFlags.DepthStencilAttachmentBit, MemoryPropertyFlags.DeviceLocalBit);
-		depthImageView = CreateImageView(depthImage, depthFormat, ImageAspectFlags.DepthBit);
+		depthImageView = CreateImageView(device, depthImage, depthFormat, ImageAspectFlags.DepthBit);
 
-		TransitionImageLayout(depthImage, depthFormat, ImageLayout.Undefined,
+		TransitionImageLayout(graphicsQueue, depthImage, depthFormat, ImageLayout.Undefined,
 			ImageLayout.DepthStencilAttachmentOptimal);
 	}
 
@@ -203,15 +200,16 @@ public unsafe class HelloTriangleApplication
 		return format is Format.D32SfloatS8Uint or Format.D24UnormS8Uint;
 	}
 
-	private Format FindDepthFormat() {
-		return FindSupportedFormat(new[] {
+	private Format FindDepthFormat(VulkanPhysicalDevice physicalDevice) {
+		return FindSupportedFormat(physicalDevice, new[] {
 			Format.D32Sfloat, Format.D32SfloatS8Uint, Format.D24UnormS8Uint
 		}, ImageTiling.Optimal, FormatFeatureFlags.DepthStencilAttachmentBit);
 	}
 
-	private Format FindSupportedFormat(IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features) {
+	private Format FindSupportedFormat(VulkanPhysicalDevice physicalDevice, 
+									   IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features) {
 		foreach (var format in candidates) {
-			var properties = _physicalDevice!.GetFormatProperties(format);
+			var properties = physicalDevice.GetFormatProperties(format);
 			if (tiling == ImageTiling.Linear && (properties.OptimalTilingFeatures & features) == features) {
 				return format;
 			}
@@ -223,8 +221,8 @@ public unsafe class HelloTriangleApplication
 		throw new Exception("Could not find a suitable format");
 	}
 
-	private void CreateTextureSampler() {
-		var properties = _physicalDevice!.GetProperties();
+	private void CreateTextureSampler(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var properties = physicalDevice.GetProperties();
 		var createInfo = new SamplerCreateInformation {
 			MinFilter = Filter.Linear,
 			MagFilter = Filter.Linear,
@@ -242,14 +240,14 @@ public unsafe class HelloTriangleApplication
 			MinLod = 0,
 			MaxLod = 0
 		};
-		textureSampler = _device!.CreateSampler(createInfo);
+		textureSampler = device.CreateSampler(createInfo);
 	}
 
-	private void CreateTextureImageView() {
-		textureImageView = CreateImageView(textureImage!, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
+	private void CreateTextureImageView(VulkanDevice device) {
+		textureImageView = CreateImageView(device, textureImage!, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
 	}
 
-	private VulkanImageView CreateImageView(VulkanImage image, Format format, ImageAspectFlags aspectFlags) {
+	private VulkanImageView CreateImageView(VulkanDevice device, VulkanImage image, Format format, ImageAspectFlags aspectFlags) {
 		var viewInfo = new ImageViewCreateInformation {
 			Image = image.Image,
 			ViewType = ImageViewType.Type2D,
@@ -262,14 +260,14 @@ public unsafe class HelloTriangleApplication
 				LayerCount = 1
 			}
 		};
-		return _device!.CreateImageView(viewInfo);
+		return device.CreateImageView(viewInfo);
 	}
 
-	private void CreateTextureImage() {
+	private void CreateTextureImage(VulkanDevice device, VulkanQueue graphicsQueue) {
 		var image = SixLabors.ImageSharp.Image.Load(TEXTURE_PATH);
 		var imageSize = image.Width * image.Height * 4;
 
-		var (stagingBuffer, stagingBufferMemory) = CreateBuffer((uint)imageSize, BufferUsageFlags.TransferSrcBit,
+		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, (uint)imageSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
 		
 		using (stagingBuffer)
@@ -278,19 +276,20 @@ public unsafe class HelloTriangleApplication
 			image.CloneAs<Rgba32>().CopyPixelDataTo(data);
 			stagingBufferMemory.UnmapMemory();
 
-			(textureImage, _) = CreateImage((uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+			(textureImage, _) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
 				ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
+			TransitionImageLayout(graphicsQueue, textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
 				ImageLayout.TransferDstOptimal);
-			CopyBufferToImage(stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height);
-			TransitionImageLayout(textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
+			CopyBufferToImage(graphicsQueue, stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height);
+			TransitionImageLayout(graphicsQueue, textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
 				ImageLayout.ShaderReadOnlyOptimal);
 		}
 	}
 
-	private (VulkanImage image, VulkanDeviceMemory imageMemory) CreateImage(uint width, uint height, Format format,
+	private (VulkanImage image, VulkanDeviceMemory imageMemory) CreateImage(VulkanDevice device, 
+		uint width, uint height, Format format,
 		ImageTiling imageTiling, ImageUsageFlags imageUsageFlags, MemoryPropertyFlags memoryPropertyFlags) {
 		
 		var imageInfo = new ImageCreateInformation {
@@ -311,14 +310,14 @@ public unsafe class HelloTriangleApplication
 			Flags = ImageCreateFlags.None
 		};
 
-		var image = _device!.CreateImage(imageInfo);
-		var imageMemory = _device!.AllocateMemoryFor(image, memoryPropertyFlags);
+		var image = device.CreateImage(imageInfo);
+		var imageMemory = device.AllocateMemoryFor(image, memoryPropertyFlags);
 		image.BindMemory(imageMemory);
 		return (image, imageMemory);
 	}
 
-	private void TransitionImageLayout(VulkanImage image, Format format, ImageLayout oldLayout, ImageLayout newLayout) {
-		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, command => {
+	private void TransitionImageLayout(VulkanQueue graphicsQueue, VulkanImage image, Format format, ImageLayout oldLayout, ImageLayout newLayout) {
+		graphicsQueue.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, command => {
 			ImageAspectFlags aspectFlags;
 			if (newLayout == ImageLayout.DepthStencilAttachmentOptimal) {
 				aspectFlags = ImageAspectFlags.DepthBit;
@@ -373,8 +372,8 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CopyBufferToImage(VulkanBuffer buffer, VulkanImage image, uint width, uint height) {
-		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, cmd => {
+	private void CopyBufferToImage(VulkanQueue graphicsQueue, VulkanBuffer buffer, VulkanImage image, uint width, uint height) {
+		graphicsQueue.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, cmd => {
 			var region = new BufferImageCopy {
 				BufferOffset = 0,
 				BufferRowLength = 0,
@@ -392,7 +391,7 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CreateDescriptorSets() {
+	private void CreateDescriptorSets(VulkanDevice device) {
 		var descriptorSets = descriptorPool!.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout!);
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			var frame = renderFrames[i];
@@ -424,11 +423,11 @@ public unsafe class HelloTriangleApplication
 				DstArrayElement = 0,
 				ImageInfo = new[]{imageInfo}
 			};
-			_device!.UpdateDescriptorSets(writeBufferInfo, writeImageInfo);
+			device.UpdateDescriptorSets(writeBufferInfo, writeImageInfo);
 		}
 	}
 
-	private void CreateDescriptorPool() {
+	private void CreateDescriptorPool(VulkanDevice device) {
 		var createInfo = new DescriptorPoolCreateInformation {
 			PoolSizes = new [] {
 				new DescriptorPoolSize {
@@ -442,22 +441,22 @@ public unsafe class HelloTriangleApplication
 			},
 			MaxSets = MaxFramesInFlight
 		};
-		descriptorPool = _device!.CreateDescriptorPool(createInfo);
+		descriptorPool = device.CreateDescriptorPool(createInfo);
 	}
 
-	private void CreateUniformBuffers() {
+	private void CreateUniformBuffers(VulkanDevice device) {
 		var bufferSize = (uint)sizeof(UniformBufferObject);
 
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			var frame = renderFrames[i];
 
-			(frame.UniformBuffer, frame.UniformBufferMemory) = CreateBuffer(bufferSize,
+			(frame.UniformBuffer, frame.UniformBufferMemory) = CreateBuffer(device, bufferSize,
 				BufferUsageFlags.UniformBufferBit,
 				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		}
 	}
 
-	private void CreateDescriptorSetLayout() {
+	private void CreateDescriptorSetLayout(VulkanDevice device) {
 		DescriptorSetLayoutBindingInformation uboLayoutBinding = new() {
 			Binding = 0,
 			DescriptorType = DescriptorType.UniformBuffer,
@@ -475,7 +474,7 @@ public unsafe class HelloTriangleApplication
 		var createInfo = new DescriptorSetLayoutCreateInformation {
 			Bindings = new[] { uboLayoutBinding, samplerLayoutBinding }
 		};
-		descriptorSetLayout = _device!.CreateDescriptorSetLayout(createInfo);
+		descriptorSetLayout = device.CreateDescriptorSetLayout(createInfo);
 	}
 
 	private VulkanInstance CreateInstance() {
@@ -548,9 +547,9 @@ public unsafe class HelloTriangleApplication
 		_surface = _khrSurface.CreateSurface(window.VkSurface!);
 	}
 
-	private void PickPhysicalDevice(VulkanInstance instance) {
+	private VulkanPhysicalDevice PickPhysicalDevice(VulkanInstance instance) {
 		var devices = instance.EnumeratePhysicalDevices();
-		_physicalDevice = devices.First(IsDeviceSuitable);
+		return devices.First(IsDeviceSuitable);
 	}
 
 	private bool IsDeviceSuitable(VulkanPhysicalDevice device) {
@@ -603,13 +602,12 @@ public unsafe class HelloTriangleApplication
 		};
 	}
 
-	public void CreateLogicalDevice() {
-		var queueFamilyIndices = FindQueueFamilies(_physicalDevice!);
+	public VulkanDevice CreateLogicalDevice(VulkanPhysicalDevice physicalDevice) {
+		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
 
 		var uniqueQueueFamilies = new[] { queueFamilyIndices.GraphicsFamily!.Value, queueFamilyIndices.PresentFamily!.Value };
 		uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
 
-		using var mem = GlobalMemory.Allocate(uniqueQueueFamilies.Length * sizeof(DeviceQueueCreateInfo));
 		var queueCreateInfos = new DeviceQueueCreateInformation[uniqueQueueFamilies.Length];
 
 		for (var i = 0; i < uniqueQueueFamilies.Length; i++) {
@@ -631,27 +629,34 @@ public unsafe class HelloTriangleApplication
 			EnabledLayers = ValidationLayers
 		};
 
-		_device = _physicalDevice!.CreateDevice(deviceCreateInfo);
-
-		_graphicsQueue = _device.GetDeviceQueue(queueFamilyIndices.GraphicsFamily.Value, 0);
-		_presentQueue = _device.GetDeviceQueue(queueFamilyIndices.PresentFamily.Value, 0);
+		return physicalDevice.CreateDevice(deviceCreateInfo);
 	}
 
-	private void RecreateSwapchain() {
+	private VulkanQueue GetGraphicsQueue(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+		return device.GetDeviceQueue(queueFamilyIndices.GraphicsFamily!.Value, 0);
+	}
+
+	private VulkanQueue GetPresentQueue(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+		return  device.GetDeviceQueue(queueFamilyIndices.PresentFamily!.Value, 0);
+	}
+
+	private void RecreateSwapchain(VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue) {
 		Vector2D<int> framebufferSize;
 		do {
 			framebufferSize = window.FramebufferSize;
 			window.DoEvents();
 		} while (framebufferSize.X == 0 || framebufferSize.Y == 0);
 
-		_device!.WaitIdle();
+		device.WaitIdle();
 		
 		CleanupSwapchain();
 		
-		CreateSwapchain();
-		CreateImageViews();
-		CreateDepthResources();
-		CreateFramebuffers();
+		CreateSwapchain(physicalDevice, device);
+		CreateImageViews(device);
+		CreateDepthResources(physicalDevice, device, graphicsQueue);
+		CreateFramebuffers(device);
 	}
 
 	private void CleanupSwapchain() {
@@ -668,8 +673,8 @@ public unsafe class HelloTriangleApplication
 		swapchain!.Dispose();
 	}
 
-	private void CreateSwapchain() {
-		var support = QuerySwapchainSupport(_physicalDevice!);
+	private void CreateSwapchain(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var support = QuerySwapchainSupport(physicalDevice);
 		var surfaceFormat = ChooseSwapSurfaceFormat(support.Formats);
 		var presentMode = ChooseSwapPresentMode(support.PresentModes);
 		var extent = ChooseSwapExtent(support.Capabilities);
@@ -693,7 +698,7 @@ public unsafe class HelloTriangleApplication
 			OldSwapchain = default
 		};
 
-		var queueFamilies = FindQueueFamilies(_physicalDevice!);
+		var queueFamilies = FindQueueFamilies(physicalDevice);
 		var queueFamilyIndices = new [] { queueFamilies.GraphicsFamily!.Value, queueFamilies.PresentFamily!.Value };
 		if (queueFamilies.GraphicsFamily != queueFamilies.PresentFamily) {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
@@ -703,7 +708,7 @@ public unsafe class HelloTriangleApplication
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Exclusive;
 		}
 
-		_khrSwapchain = _device!.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
+		_khrSwapchain = device.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
 
 		swapchain = _khrSwapchain.CreateSwapchain(swapchainCreateInfo);
 
@@ -748,15 +753,15 @@ public unsafe class HelloTriangleApplication
 		return actualExtent;
 	}
 
-	private void CreateImageViews() {
+	private void CreateImageViews(VulkanDevice device) {
 		swapchainImageViews = new VulkanImageView[swapchainImages.Length];
 		for (var i = 0; i < swapchainImages.Length; i++) {
-			swapchainImageViews[i] = CreateImageView(swapchainImages[i], swapchainFormat, ImageAspectFlags.ColorBit);
+			swapchainImageViews[i] = CreateImageView(device, swapchainImages[i], swapchainFormat, ImageAspectFlags.ColorBit);
 		}
 	}
 
-	private void CreateRenderPass() {
-		renderPass = _device!.CreateRenderPass(new RenderPassCreateInformation {
+	private void CreateRenderPass(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		renderPass = device.CreateRenderPass(new RenderPassCreateInformation {
 			Attachments = new[]{new AttachmentDescription {
 				Format = swapchainFormat,
 				Samples = SampleCountFlags.Count1Bit,
@@ -767,7 +772,7 @@ public unsafe class HelloTriangleApplication
 				InitialLayout = ImageLayout.Undefined,
 				FinalLayout = ImageLayout.PresentSrcKhr
 			}, new AttachmentDescription {
-				Format = FindDepthFormat(),
+				Format = FindDepthFormat(physicalDevice),
 				Samples = SampleCountFlags.Count1Bit,
 				LoadOp = AttachmentLoadOp.Clear,
 				StoreOp = AttachmentStoreOp.DontCare,
@@ -804,14 +809,14 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CreateGraphicsPipeline() {
+	private void CreateGraphicsPipeline(VulkanDevice device) {
 		var vertShaderCode = File.ReadAllBytes("shaders/vert.spv");
 		var fragShaderCode = File.ReadAllBytes("shaders/frag.spv");
 
-		var vertShaderModule = _device!.CreateShaderModule(vertShaderCode);
-		var fragShaderModule = _device!.CreateShaderModule(fragShaderCode);
+		using var vertShaderModule = device.CreateShaderModule(vertShaderCode);
+		using var fragShaderModule = device.CreateShaderModule(fragShaderCode);
 
-		pipelineLayout = _device!.CreatePipelineLayout(descriptorSetLayout!.DescriptorSetLayout);
+		pipelineLayout = device.CreatePipelineLayout(descriptorSetLayout!.DescriptorSetLayout);
 
 		var pipelineInfo = new GraphicsPipelineCreateInformation {
 			Stages = new[] { new PipelineShaderStageCreateInformation {
@@ -886,13 +891,10 @@ public unsafe class HelloTriangleApplication
 			}
 		};
 
-		graphicsPipeline = _device.CreateGraphicsPipeline(pipelineInfo);
-		
-		vertShaderModule.Dispose();
-		fragShaderModule.Dispose();
+		graphicsPipeline = device.CreateGraphicsPipeline(pipelineInfo);
 	}
 
-	private void CreateFramebuffers() {
+	private void CreateFramebuffers(VulkanDevice device) {
 		swapchainFramebuffers = new VulkanFramebuffer[swapchainImageViews.Length];
 
 		for (var i = 0; i < swapchainImageViews.Length; i++) {
@@ -905,24 +907,24 @@ public unsafe class HelloTriangleApplication
 				Layers = 1
 			};
 
-			swapchainFramebuffers[i] = _device!.CreateFramebuffer(framebufferInfo);
+			swapchainFramebuffers[i] = device.CreateFramebuffer(framebufferInfo);
 		}
 	}
 
-	private void CreateCommandPool() {
-		var queueFamilyIndices = FindQueueFamilies(_physicalDevice!);
+	private void CreateCommandPool(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
 
 		var commandPoolCreateInfo = new CommandPoolCreateInformation {
 			QueueFamilyIndex = queueFamilyIndices.GraphicsFamily!.Value,
 			Flags = CommandPoolCreateFlags.ResetCommandBufferBit
 		};
 
-		commandPool = _device!.CreateCommandPool(commandPoolCreateInfo);
+		commandPool = device.CreateCommandPool(commandPoolCreateInfo);
 	}
 
-	private void CreateVertexBuffer() {
+	private void CreateVertexBuffer(VulkanDevice device, VulkanQueue graphicsQueue) {
 		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Count);
-		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
+		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		
 		using (stagingBuffer)
@@ -931,18 +933,18 @@ public unsafe class HelloTriangleApplication
 			vertices.ToArray().AsSpan().CopyTo(data);
 			stagingBufferMemory.UnmapMemory();
 		
-			(vertexBuffer, _) = CreateBuffer(bufferSize, 
+			(vertexBuffer, _) = CreateBuffer(device, bufferSize, 
 				BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit, 
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+			CopyBuffer(graphicsQueue, stagingBuffer, vertexBuffer, bufferSize);
 		}
 	}
 
-	private void CreateIndexBuffer() {
+	private void CreateIndexBuffer(VulkanDevice device, VulkanQueue graphicsQueue) {
 		var bufferSize =  sizeof(int) * (uint)indices.Count;
 
-		var (stagingBuffer, stagingMemory) = CreateBuffer(bufferSize, BufferUsageFlags.TransferSrcBit,
+		var (stagingBuffer, stagingMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
 
 		using (stagingBuffer)
@@ -951,28 +953,30 @@ public unsafe class HelloTriangleApplication
 			indices.ToArray().AsSpan().CopyTo(data);
 			stagingMemory.UnmapMemory();
 
-			(indexBuffer, _) = CreateBuffer(bufferSize,
+			(indexBuffer, _) = CreateBuffer(device, bufferSize,
 				BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
+			CopyBuffer(graphicsQueue, stagingBuffer, indexBuffer, bufferSize);
 		}
 	}
 
-	private void CopyBuffer(VulkanBuffer source, VulkanBuffer destination, uint size) {
-		_graphicsQueue!.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, buffer => {
+	private void CopyBuffer(VulkanQueue graphicsQueue, VulkanBuffer source, VulkanBuffer destination, uint size) {
+		graphicsQueue.SubmitSingleUseCommandBufferAndWaitIdle(commandPool!, buffer => {
 			buffer.CopyBuffer(source, destination, size);
 		});
 	}
 
-	private (VulkanBuffer buffer, VulkanDeviceMemory memory) CreateBuffer(uint size, BufferUsageFlags usage, MemoryPropertyFlags properties) {
+	private (VulkanBuffer buffer, VulkanDeviceMemory memory) CreateBuffer(VulkanDevice device, uint size,
+																		  BufferUsageFlags usage,
+																		  MemoryPropertyFlags properties) {
 		var bufferCreateInfo = new BufferCreateInformation {
 			Size = size,
 			Usage = usage,
 			SharingMode = SharingMode.Exclusive
 		};
-		var buffer = _device!.CreateBuffer(bufferCreateInfo);
-		var bufferMemory = _device.AllocateMemoryFor(buffer, properties);
+		var buffer = device.CreateBuffer(bufferCreateInfo);
+		var bufferMemory = device.AllocateMemoryFor(buffer, properties);
 		buffer.BindMemory(bufferMemory);
 		return (buffer, bufferMemory);
 	}
@@ -985,11 +989,11 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void CreateSyncObjects() {
+	private void CreateSyncObjects(VulkanDevice device) {
 		foreach (var frame in renderFrames) {
-			frame.ImageAvailableSemaphore = _device!.CreateSemaphore();
-			frame.RenderFinishedSemaphore = _device!.CreateSemaphore();
-			frame.InFlightFence = _device.CreateFence(FenceCreateFlags.SignaledBit);
+			frame.ImageAvailableSemaphore = device.CreateSemaphore();
+			frame.RenderFinishedSemaphore = device.CreateSemaphore();
+			frame.InFlightFence = device.CreateFence(FenceCreateFlags.SignaledBit);
 		}
 	}
 
@@ -1039,16 +1043,17 @@ public unsafe class HelloTriangleApplication
 		buffer.End();
 	}
 
-	private void MainLoop() {
-		window.Render += DrawFrame;
+	private void MainLoop(VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue, VulkanQueue presentQueue) {
+		window.Render += dt => DrawFrame(dt, physicalDevice, device, graphicsQueue, presentQueue);
 		window.Resize += _ => framebufferResized = true;
 		window.Run();
-		_device!.WaitIdle();
+		device.WaitIdle();
 	}
 
 	private double currentTime;
 
-	private void DrawFrame(double dt) {
+	private void DrawFrame(double dt, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
+						   VulkanQueue graphicsQueue, VulkanQueue presentQueue) {
 		currentTime += dt;
 		
 		var frame = renderFrames[currentFrame];
@@ -1060,12 +1065,12 @@ public unsafe class HelloTriangleApplication
 		}
 		catch (ErrorOutOfDateKhrException)
 		{
-			RecreateSwapchain();
+			RecreateSwapchain(physicalDevice, device, graphicsQueue);
 			return;
 		}
 		catch (SuboptimalKhrException)
 		{
-			RecreateSwapchain();
+			RecreateSwapchain(physicalDevice, device, graphicsQueue);
 			return;
 		}
 
@@ -1079,7 +1084,7 @@ public unsafe class HelloTriangleApplication
 		var buffer = frame.CommandBuffer;
 		var signalSemaphores = new[] { frame.RenderFinishedSemaphore!.Semaphore };
 
-		_graphicsQueue!.Submit(new SubmitInformation {
+		graphicsQueue.Submit(new SubmitInformation {
 			WaitSemaphores = new[]{ frame.ImageAvailableSemaphore!.Semaphore },
 			SignalSemaphores = signalSemaphores,
 			CommandBuffers = new[]{buffer.CommandBuffer},
@@ -1093,21 +1098,21 @@ public unsafe class HelloTriangleApplication
 			ImageIndices = new[]{imageIndex}
 		};
 		try {
-			_khrSwapchain!.QueuePresent(_presentQueue!, presentInfo);
+			_khrSwapchain!.QueuePresent(presentQueue, presentInfo);
 		}
 		catch (ErrorOutOfDateKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain();
+			RecreateSwapchain(physicalDevice, device, graphicsQueue);
 			return;
 		}
 		catch (SuboptimalKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain();
+			RecreateSwapchain(physicalDevice, device, graphicsQueue);
 			return;
 		}
 		if (framebufferResized) {
 			framebufferResized = false;
-			RecreateSwapchain();
+			RecreateSwapchain(physicalDevice, device, graphicsQueue);
 			return;
 		}
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
@@ -1151,7 +1156,6 @@ public unsafe class HelloTriangleApplication
 
 		CleanupSwapchain();
 
-		_device!.Dispose();
 		if (EnableValidationLayers) {
 			debugMessenger!.Dispose();
 		}
