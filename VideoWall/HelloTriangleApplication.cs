@@ -68,10 +68,6 @@ public unsafe class HelloTriangleApplication
 	private VulkanBuffer? vertexBuffer;
 	private VulkanBuffer? indexBuffer;
 
-	private VulkanImage? textureImage;
-	private VulkanImageView? textureImageView;
-	private VulkanSampler? textureSampler;
-
 	private VulkanImage? depthImage;
 	private VulkanDeviceMemory? depthImageMemory;
 	private VulkanImageView? depthImageView;
@@ -122,15 +118,15 @@ public unsafe class HelloTriangleApplication
 		var commandPool = CreateCommandPool(instance, physicalDevice, device, surface);
 		CreateDepthResources(physicalDevice, device, graphicsQueue, commandPool);
 		CreateFramebuffers(device, renderPass);
-		CreateTextureImage(device, graphicsQueue, commandPool);
-		CreateTextureImageView(device);
-		CreateTextureSampler(physicalDevice, device);
+		var texture = CreateTextureImage(device, graphicsQueue, commandPool);
+		var imageView = CreateTextureImageView(device, texture);
+		var sampler = CreateTextureSampler(physicalDevice, device);
 		LoadModel();
 		CreateVertexBuffer(device, graphicsQueue, commandPool);
 		CreateIndexBuffer(device, graphicsQueue, commandPool);
 		CreateUniformBuffers(device);
 		var descriptorPool = CreateDescriptorPool(device);
-		CreateDescriptorSets(device, descriptorPool, descriptorSetLayout);
+		CreateDescriptorSets(device, descriptorPool, descriptorSetLayout, sampler, imageView);
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
 
@@ -213,7 +209,7 @@ public unsafe class HelloTriangleApplication
 		throw new Exception("Could not find a suitable format");
 	}
 
-	private void CreateTextureSampler(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+	private VulkanSampler CreateTextureSampler(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
 		var properties = physicalDevice.GetProperties();
 		var createInfo = new SamplerCreateInformation {
 			MinFilter = Filter.Linear,
@@ -232,11 +228,11 @@ public unsafe class HelloTriangleApplication
 			MinLod = 0,
 			MaxLod = 0
 		};
-		textureSampler = device.CreateSampler(createInfo);
+		return device.CreateSampler(createInfo);
 	}
 
-	private void CreateTextureImageView(VulkanDevice device) {
-		textureImageView = CreateImageView(device, textureImage!, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
+	private VulkanImageView CreateTextureImageView(VulkanDevice device, VulkanImage image) {
+		return CreateImageView(device, image, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
 	}
 
 	private VulkanImageView CreateImageView(VulkanDevice device, VulkanImage image, Format format, ImageAspectFlags aspectFlags) {
@@ -255,7 +251,7 @@ public unsafe class HelloTriangleApplication
 		return device.CreateImageView(viewInfo);
 	}
 
-	private void CreateTextureImage(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+	private VulkanImage CreateTextureImage(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
 		var image = SixLabors.ImageSharp.Image.Load(TEXTURE_PATH);
 		var imageSize = image.Width * image.Height * 4;
 
@@ -268,7 +264,7 @@ public unsafe class HelloTriangleApplication
 			image.CloneAs<Rgba32>().CopyPixelDataTo(data);
 			stagingBufferMemory.UnmapMemory();
 
-			(textureImage, _) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+			var (textureImage, _) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
 				ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 				MemoryPropertyFlags.DeviceLocalBit);
 
@@ -277,6 +273,8 @@ public unsafe class HelloTriangleApplication
 			CopyBufferToImage(graphicsQueue, stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height, commandPool);
 			TransitionImageLayout(graphicsQueue, textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
 				ImageLayout.ShaderReadOnlyOptimal, commandPool);
+
+			return textureImage;
 		}
 	}
 
@@ -385,24 +383,25 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CreateDescriptorSets(VulkanDevice device, VulkanDescriptorPool descriptorPool, VulkanDescriptorSetLayout descriptorSetLayout) {
+	private void CreateDescriptorSets(VulkanDevice device, VulkanDescriptorPool descriptorPool, 
+			VulkanDescriptorSetLayout descriptorSetLayout, VulkanSampler textureSampler, VulkanImageView textureImageView) {
 		var descriptorSets = descriptorPool.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout);
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			var frame = renderFrames[i];
 			frame.DescriptorSet = descriptorSets[i];
 
 			var bufferInfo = new DescriptorBufferInfo {
-				Buffer = frame.UniformBuffer!.Buffer,
+				Buffer = frame.UniformBuffer!,
 				Offset = 0,
 				Range = (uint)sizeof(UniformBufferObject)
 			};
 			var imageInfo = new DescriptorImageInfo {
-				Sampler = textureSampler!.Sampler,
-				ImageView = textureImageView!.ImageView,
+				Sampler = textureSampler,
+				ImageView = textureImageView,
 				ImageLayout = ImageLayout.ShaderReadOnlyOptimal
 			};
 			var writeBufferInfo = new WriteDescriptorSetInformation {
-				DstSet = frame.DescriptorSet.DescriptorSet,
+				DstSet = frame.DescriptorSet,
 				DstBinding = 0,
 				DstArrayElement = 0,
 				DescriptorType = DescriptorType.UniformBuffer,
@@ -410,7 +409,7 @@ public unsafe class HelloTriangleApplication
 				BufferInfo = new[]{bufferInfo}
 			};
 			var writeImageInfo = new WriteDescriptorSetInformation {
-				DstSet = frame.DescriptorSet.DescriptorSet,
+				DstSet = frame.DescriptorSet,
 				DstBinding = 1,
 				DescriptorType = DescriptorType.CombinedImageSampler,
 				DescriptorCount = 1,
