@@ -59,8 +59,6 @@ public unsafe class HelloTriangleApplication
 
 	private VulkanImageView[] swapchainImageViews = Array.Empty<VulkanImageView>();
 
-	private VulkanDescriptorSetLayout? descriptorSetLayout;
-	private VulkanPipelineLayout? pipelineLayout;
 	private VulkanPipeline? graphicsPipeline;
 
 	private VulkanFramebuffer[] swapchainFramebuffers = Array.Empty<VulkanFramebuffer>();
@@ -96,14 +94,14 @@ public unsafe class HelloTriangleApplication
 
 	public void Run()
 	{
-		var (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass) = InitVulkan();
-		MainLoop(instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass);
+		var (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, pipelineLayout) = InitVulkan();
+		MainLoop(instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, pipelineLayout);
 		CleanUp(instance);
 	}
 
 	private (VulkanInstance, VulkanPhysicalDevice, VulkanDevice, 
 		VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface,
-		VulkanCommandPool commandPool, VulkanRenderPass renderPass) InitVulkan() {
+		VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout) InitVulkan() {
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			renderFrames[i] = new RenderFrame();
 		}
@@ -118,8 +116,9 @@ public unsafe class HelloTriangleApplication
 		CreateSwapchain(instance, physicalDevice, device, surface);
 		CreateImageViews(device);
 		var renderPass = CreateRenderPass(physicalDevice, device);
-		CreateDescriptorSetLayout(device);
-		CreateGraphicsPipeline(device, renderPass);
+		var descriptorSetLayout = CreateDescriptorSetLayout(device);
+		var pipelineLayout = device.CreatePipelineLayout(descriptorSetLayout);
+		CreateGraphicsPipeline(device, renderPass, pipelineLayout);
 		var commandPool = CreateCommandPool(instance, physicalDevice, device, surface);
 		CreateDepthResources(physicalDevice, device, graphicsQueue, commandPool);
 		CreateFramebuffers(device, renderPass);
@@ -131,11 +130,12 @@ public unsafe class HelloTriangleApplication
 		CreateIndexBuffer(device, graphicsQueue, commandPool);
 		CreateUniformBuffers(device);
 		var descriptorPool = CreateDescriptorPool(device);
-		CreateDescriptorSets(device, descriptorPool);
+		CreateDescriptorSets(device, descriptorPool, descriptorSetLayout);
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
 
-		return (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass);
+		return (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, 
+				   pipelineLayout);
 	}
 
 	private void LoadModel() {
@@ -385,8 +385,8 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CreateDescriptorSets(VulkanDevice device, VulkanDescriptorPool descriptorPool) {
-		var descriptorSets = descriptorPool.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout!);
+	private void CreateDescriptorSets(VulkanDevice device, VulkanDescriptorPool descriptorPool, VulkanDescriptorSetLayout descriptorSetLayout) {
+		var descriptorSets = descriptorPool.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout);
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			var frame = renderFrames[i];
 			frame.DescriptorSet = descriptorSets[i];
@@ -450,7 +450,7 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void CreateDescriptorSetLayout(VulkanDevice device) {
+	private VulkanDescriptorSetLayout CreateDescriptorSetLayout(VulkanDevice device) {
 		DescriptorSetLayoutBindingInformation uboLayoutBinding = new() {
 			Binding = 0,
 			DescriptorType = DescriptorType.UniformBuffer,
@@ -468,7 +468,7 @@ public unsafe class HelloTriangleApplication
 		var createInfo = new DescriptorSetLayoutCreateInformation {
 			Bindings = new[] { uboLayoutBinding, samplerLayoutBinding }
 		};
-		descriptorSetLayout = device.CreateDescriptorSetLayout(createInfo);
+		return device.CreateDescriptorSetLayout(createInfo);
 	}
 
 	private VulkanInstance CreateInstance() {
@@ -798,15 +798,13 @@ public unsafe class HelloTriangleApplication
 		});
 	}
 
-	private void CreateGraphicsPipeline(VulkanDevice device, VulkanRenderPass renderPass) {
+	private void CreateGraphicsPipeline(VulkanDevice device, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout) {
 		var vertShaderCode = File.ReadAllBytes("shaders/vert.spv");
 		var fragShaderCode = File.ReadAllBytes("shaders/frag.spv");
 
 		using var vertShaderModule = device.CreateShaderModule(vertShaderCode);
 		using var fragShaderModule = device.CreateShaderModule(fragShaderCode);
-
-		pipelineLayout = device.CreatePipelineLayout(descriptorSetLayout!.DescriptorSetLayout);
-
+		
 		var pipelineInfo = new GraphicsPipelineCreateInformation {
 			Stages = new[] { new PipelineShaderStageCreateInformation {
 				Stage = ShaderStageFlags.VertexBit,
@@ -872,7 +870,7 @@ public unsafe class HelloTriangleApplication
 					BlendEnable = false
 				}}
 			},
-			Layout = pipelineLayout.PipelineLayout,
+			Layout = pipelineLayout,
 			RenderPass = renderPass,
 			Subpass = 0,
 			DynamicState = new PipelineDynamicStateCreateInformation {
@@ -987,7 +985,7 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void RecordCommandBuffer(VulkanCommandBuffer buffer, int index, VulkanRenderPass renderPass) {
+	private void RecordCommandBuffer(VulkanCommandBuffer buffer, int index, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout) {
 		buffer.Begin();
 		
 		var colorClear = new ClearValue {
@@ -1025,7 +1023,7 @@ public unsafe class HelloTriangleApplication
 		};
 		buffer.SetScissor(0, scissor);
 
-		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout!, 0, renderFrames[currentFrame].DescriptorSet!);
+		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
 		buffer.DrawIndexed((uint)indices.Count);
 
 		buffer.EndRenderPass();
@@ -1035,9 +1033,9 @@ public unsafe class HelloTriangleApplication
 
 	private void MainLoop(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
 						  VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface, 
-						  VulkanCommandPool commandPool, VulkanRenderPass renderPass) {
+						  VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout) {
 		window.Render += dt => DrawFrame(dt, instance, physicalDevice, device, graphicsQueue,
-										 presentQueue, surface, commandPool, renderPass);
+										 presentQueue, surface, commandPool, renderPass, pipelineLayout);
 		window.Resize += _ => framebufferResized = true;
 		window.Run();
 		device.WaitIdle();
@@ -1047,7 +1045,7 @@ public unsafe class HelloTriangleApplication
 
 	private void DrawFrame(double dt, VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
 						   VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface,
-						   VulkanCommandPool commandPool, VulkanRenderPass renderPass) {
+						   VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout) {
 		currentTime += dt;
 		
 		var frame = renderFrames[currentFrame];
@@ -1071,7 +1069,7 @@ public unsafe class HelloTriangleApplication
 		frame.InFlightFence.Reset();
 
 		frame.CommandBuffer!.Reset();
-		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, renderPass);
+		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, renderPass, pipelineLayout);
 
 		UpdateUniformBuffer(currentFrame);
 
@@ -1144,8 +1142,7 @@ public unsafe class HelloTriangleApplication
 		}
 
 		graphicsPipeline!.Dispose();
-		pipelineLayout!.Dispose();
-
+		
 		CleanupSwapchain();
 
 		instance.Dispose();
