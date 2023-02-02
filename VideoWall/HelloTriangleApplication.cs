@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Silk.NET.Assimp;
 using Silk.NET.Core.Native;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using SilkNetConvenience;
-using SilkNetConvenience.Assimp.Wrappers;
 using SilkNetConvenience.Barriers;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
@@ -37,7 +35,6 @@ public unsafe class HelloTriangleApplication
 	private const int WIDTH = 800;
 	private const int HEIGHT = 600;
 
-	private const string MODEL_PATH = "models/viking_room.obj";
 	private const string TEXTURE_PATH = "models/viking_room.png";
 
 	private readonly string[] ValidationLayers = new[] {
@@ -72,8 +69,29 @@ public unsafe class HelloTriangleApplication
 	private VulkanDeviceMemory? depthImageMemory;
 	private VulkanImageView? depthImageView;
 
-	private readonly List<Vertex> vertices = new();
-	private readonly List<uint> indices = new();
+	private readonly Vertex[] vertices = new[] {
+		new Vertex {
+			Position = new Vector3D<float>(0, 0, 0),
+			TexCoord = new Vector2D<float>(0, 0),
+			Color = new Vector3D<float>(1)
+		},
+		new Vertex {
+			Position = new Vector3D<float>(1, 0, 0),
+			TexCoord = new Vector2D<float>(1, 0),
+			Color = new Vector3D<float>(1)
+		},
+		new Vertex {
+			Position = new Vector3D<float>(1, 1, 0),
+			TexCoord = new Vector2D<float>(1, 1),
+			Color = new Vector3D<float>(1)
+		},
+		new Vertex {
+			Position = new Vector3D<float>(0, 1, 0),
+			TexCoord = new Vector2D<float>(0, 1),
+			Color = new Vector3D<float>(1)
+		},
+	};
+	private readonly uint[] indices = new uint[]{0, 1, 2, 2, 3, 0};
 
 	public HelloTriangleApplication() {
 		window = new Illustrate.Window("VideoWall", WIDTH, HEIGHT);
@@ -121,7 +139,6 @@ public unsafe class HelloTriangleApplication
 		var texture = CreateTextureImage(device, graphicsQueue, commandPool);
 		var imageView = CreateTextureImageView(device, texture);
 		var sampler = CreateTextureSampler(physicalDevice, device);
-		LoadModel();
 		CreateVertexBuffer(device, graphicsQueue, commandPool);
 		CreateIndexBuffer(device, graphicsQueue, commandPool);
 		CreateUniformBuffers(device);
@@ -132,45 +149,6 @@ public unsafe class HelloTriangleApplication
 
 		return (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, 
 				   pipelineLayout, graphicsPipeline);
-	}
-
-	private void LoadModel() {
-		using var assimp = new AssimpContext();
-		using var scene = assimp.ImportFile(MODEL_PATH, (uint)PostProcessPreset.TargetRealTimeMaximumQuality);
-		var vertexMap = new Dictionary<Vertex, uint>();
-		VisitSceneNode(vertexMap, scene.RootNode);
-	}
-
-	private void VisitSceneNode(IDictionary<Vertex, uint> vertexMap, AssimpNode node) {
-		foreach (var mesh in node.Meshes) {
-			foreach (var face in mesh.Faces) {
-				foreach (var index in face.Indices) {
-					var position = mesh.Vertices[index];
-					var texture = mesh.TextureCoords[0][(int)index];
-
-					var vertex = new Vertex
-					{
-						Position = new Vector3D<float>(position.X, position.Y, position.Z),
-						Color = new Vector3D<float>(1, 1, 1),
-						//Flip Y for OBJ in Vulkan
-						TexCoord = new Vector2D<float>(texture.X, 1.0f - texture.Y)
-					};
-
-					if (vertexMap.TryGetValue(vertex, out var meshIndex)) {
-						indices.Add(meshIndex);
-					}
-					else {
-						indices.Add((uint)vertices.Count);
-						vertexMap[vertex] = (uint)vertices.Count;
-						vertices.Add(vertex);
-					}                        
-				}
-			}
-		}
-
-		foreach (var child in node.Children) {
-			VisitSceneNode(vertexMap, child);
-		}
 	}
 
 	private void CreateDepthResources(VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
@@ -909,7 +887,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateVertexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Count);
+		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		
@@ -928,7 +906,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateIndexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize =  sizeof(int) * (uint)indices.Count;
+		var bufferSize =  sizeof(int) * (uint)indices.Length;
 
 		var (stagingBuffer, stagingMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
@@ -1024,7 +1002,7 @@ public unsafe class HelloTriangleApplication
 		buffer.SetScissor(0, scissor);
 
 		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
-		buffer.DrawIndexed((uint)indices.Count);
+		buffer.DrawIndexed((uint)indices.Length);
 
 		buffer.EndRenderPass();
 
