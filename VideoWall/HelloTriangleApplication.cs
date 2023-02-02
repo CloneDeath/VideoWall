@@ -52,10 +52,6 @@ public unsafe class HelloTriangleApplication
 	private readonly Illustrate.Window window;
 	private readonly VulkanContext vk;
 	
-	private VulkanDebugUtils? debugUtils;
-	private VulkanDebugUtilsMessenger? debugMessenger;
-
-	private VulkanKhrSurface? _khrSurface;
 	private VulkanSurface? _surface;
 
 	private VulkanKhrSwapchain? _khrSwapchain;
@@ -108,7 +104,7 @@ public unsafe class HelloTriangleApplication
 	public void Run()
 	{
 		var (instance, physicalDevice, device, graphicsQueue, presentQueue) = InitVulkan();
-		MainLoop(physicalDevice, device, graphicsQueue, presentQueue);
+		MainLoop(instance, physicalDevice, device, graphicsQueue, presentQueue);
 		CleanUp(instance);
 	}
 
@@ -121,15 +117,15 @@ public unsafe class HelloTriangleApplication
 		SetupDebugMessenger(instance);
 		CreateSurface(instance);
 		var physicalDevice = PickPhysicalDevice(instance);
-		var device = CreateLogicalDevice(physicalDevice);
-		var graphicsQueue = GetGraphicsQueue(physicalDevice, device);
-		var presentQueue = GetPresentQueue(physicalDevice, device);
-		CreateSwapchain(physicalDevice, device);
+		var device = CreateLogicalDevice(instance, physicalDevice);
+		var graphicsQueue = GetGraphicsQueue(instance, physicalDevice, device);
+		var presentQueue = GetPresentQueue(instance, physicalDevice, device);
+		CreateSwapchain(instance, physicalDevice, device);
 		CreateImageViews(device);
 		CreateRenderPass(physicalDevice, device);
 		CreateDescriptorSetLayout(device);
 		CreateGraphicsPipeline(device);
-		CreateCommandPool(physicalDevice, device);
+		CreateCommandPool(instance, physicalDevice, device);
 		CreateDepthResources(physicalDevice, device, graphicsQueue);
 		CreateFramebuffers(device);
 		CreateTextureImage(device, graphicsQueue);
@@ -524,13 +520,10 @@ public unsafe class HelloTriangleApplication
 	private void SetupDebugMessenger(VulkanInstance instance) {
 		if (!EnableValidationLayers) return;
 
-		debugUtils = instance.GetDebugUtilsExtension();
-		if (debugUtils == null) return;
-		
 		var createInfo = new DebugUtilsMessengerCreateInformation();
 		PopulateDebugMessengerCreateInfo(ref createInfo);
 
-		debugMessenger = debugUtils!.CreateDebugUtilsMessenger(createInfo);
+		instance.DebugUtils.CreateDebugUtilsMessenger(createInfo);
 	}
 
 	private static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
@@ -543,22 +536,21 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateSurface(VulkanInstance instance) {
-		_khrSurface = instance.GetKhrSurfaceExtension() ?? throw new NotSupportedException("Could not create a KHR Surface");
-		_surface = _khrSurface.CreateSurface(window.VkSurface!);
+		_surface = instance.KhrSurface.CreateSurface(window.VkSurface!);
 	}
 
 	private VulkanPhysicalDevice PickPhysicalDevice(VulkanInstance instance) {
 		var devices = instance.EnumeratePhysicalDevices();
-		return devices.First(IsDeviceSuitable);
+		return devices.First(d => IsDeviceSuitable(instance, d));
 	}
 
-	private bool IsDeviceSuitable(VulkanPhysicalDevice device) {
-		var queueFamilyIndices = FindQueueFamilies(device);
+	private bool IsDeviceSuitable(VulkanInstance instance, VulkanPhysicalDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(instance, device);
 		var extensionsSupported = CheckDeviceExtensionSupport(device);
 
 		var swapchainAdequate = false;
 		if (extensionsSupported) {
-			var swapchainSupport = QuerySwapchainSupport(device);
+			var swapchainSupport = QuerySwapchainSupport(instance, device);
 			swapchainAdequate = swapchainSupport.Formats.Any() && swapchainSupport.PresentModes.Any();
 		}
 
@@ -573,7 +565,7 @@ public unsafe class HelloTriangleApplication
 		return DeviceExtensions.All(propertyNames.Contains);
 	}
 
-	private QueueFamilyIndices FindQueueFamilies(VulkanPhysicalDevice physicalDevice) {
+	private QueueFamilyIndices FindQueueFamilies(VulkanInstance instance, VulkanPhysicalDevice physicalDevice) {
 		var properties = physicalDevice.GetQueueFamilyProperties();
 
 		var queueFamilyIndices = new QueueFamilyIndices();
@@ -583,7 +575,7 @@ public unsafe class HelloTriangleApplication
 				queueFamilyIndices.GraphicsFamily = i;
 			}
 
-			var supported = _khrSurface!.GetPhysicalDeviceSurfaceSupport(physicalDevice, i, _surface!);
+			var supported = instance.KhrSurface.GetPhysicalDeviceSurfaceSupport(physicalDevice, i, _surface!);
 			if (supported) {
 				queueFamilyIndices.PresentFamily = i;
 			}
@@ -594,16 +586,16 @@ public unsafe class HelloTriangleApplication
 		return queueFamilyIndices;
 	}
 
-	public SwapchainSupportDetails QuerySwapchainSupport(VulkanPhysicalDevice physicalDevice) {
+	public SwapchainSupportDetails QuerySwapchainSupport(VulkanInstance instance, VulkanPhysicalDevice physicalDevice) {
 		return new SwapchainSupportDetails {
-			Capabilities = _khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, _surface!),
-			Formats = _khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, _surface!),
-			PresentModes = _khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, _surface!)
+			Capabilities = instance.KhrSurface.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, _surface!),
+			Formats = instance.KhrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, _surface!),
+			PresentModes = instance.KhrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, _surface!)
 		};
 	}
 
-	public VulkanDevice CreateLogicalDevice(VulkanPhysicalDevice physicalDevice) {
-		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+	public VulkanDevice CreateLogicalDevice(VulkanInstance instance, VulkanPhysicalDevice physicalDevice) {
+		var queueFamilyIndices = FindQueueFamilies(instance, physicalDevice);
 
 		var uniqueQueueFamilies = new[] { queueFamilyIndices.GraphicsFamily!.Value, queueFamilyIndices.PresentFamily!.Value };
 		uniqueQueueFamilies = uniqueQueueFamilies.Distinct().ToArray();
@@ -632,17 +624,17 @@ public unsafe class HelloTriangleApplication
 		return physicalDevice.CreateDevice(deviceCreateInfo);
 	}
 
-	private VulkanQueue GetGraphicsQueue(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
-		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+	private VulkanQueue GetGraphicsQueue(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(instance, physicalDevice);
 		return device.GetDeviceQueue(queueFamilyIndices.GraphicsFamily!.Value, 0);
 	}
 
-	private VulkanQueue GetPresentQueue(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
-		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+	private VulkanQueue GetPresentQueue(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(instance, physicalDevice);
 		return  device.GetDeviceQueue(queueFamilyIndices.PresentFamily!.Value, 0);
 	}
 
-	private void RecreateSwapchain(VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue) {
+	private void RecreateSwapchain(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue) {
 		Vector2D<int> framebufferSize;
 		do {
 			framebufferSize = window.FramebufferSize;
@@ -653,7 +645,7 @@ public unsafe class HelloTriangleApplication
 		
 		CleanupSwapchain();
 		
-		CreateSwapchain(physicalDevice, device);
+		CreateSwapchain(instance, physicalDevice, device);
 		CreateImageViews(device);
 		CreateDepthResources(physicalDevice, device, graphicsQueue);
 		CreateFramebuffers(device);
@@ -673,8 +665,8 @@ public unsafe class HelloTriangleApplication
 		swapchain!.Dispose();
 	}
 
-	private void CreateSwapchain(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
-		var support = QuerySwapchainSupport(physicalDevice);
+	private void CreateSwapchain(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var support = QuerySwapchainSupport(instance, physicalDevice);
 		var surfaceFormat = ChooseSwapSurfaceFormat(support.Formats);
 		var presentMode = ChooseSwapPresentMode(support.PresentModes);
 		var extent = ChooseSwapExtent(support.Capabilities);
@@ -698,7 +690,7 @@ public unsafe class HelloTriangleApplication
 			OldSwapchain = default
 		};
 
-		var queueFamilies = FindQueueFamilies(physicalDevice);
+		var queueFamilies = FindQueueFamilies(instance, physicalDevice);
 		var queueFamilyIndices = new [] { queueFamilies.GraphicsFamily!.Value, queueFamilies.PresentFamily!.Value };
 		if (queueFamilies.GraphicsFamily != queueFamilies.PresentFamily) {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
@@ -911,8 +903,8 @@ public unsafe class HelloTriangleApplication
 		}
 	}
 
-	private void CreateCommandPool(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
-		var queueFamilyIndices = FindQueueFamilies(physicalDevice);
+	private void CreateCommandPool(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
+		var queueFamilyIndices = FindQueueFamilies(instance, physicalDevice);
 
 		var commandPoolCreateInfo = new CommandPoolCreateInformation {
 			QueueFamilyIndex = queueFamilyIndices.GraphicsFamily!.Value,
@@ -1043,8 +1035,9 @@ public unsafe class HelloTriangleApplication
 		buffer.End();
 	}
 
-	private void MainLoop(VulkanPhysicalDevice physicalDevice, VulkanDevice device, VulkanQueue graphicsQueue, VulkanQueue presentQueue) {
-		window.Render += dt => DrawFrame(dt, physicalDevice, device, graphicsQueue, presentQueue);
+	private void MainLoop(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
+						  VulkanQueue graphicsQueue, VulkanQueue presentQueue) {
+		window.Render += dt => DrawFrame(dt, instance, physicalDevice, device, graphicsQueue, presentQueue);
 		window.Resize += _ => framebufferResized = true;
 		window.Run();
 		device.WaitIdle();
@@ -1052,7 +1045,7 @@ public unsafe class HelloTriangleApplication
 
 	private double currentTime;
 
-	private void DrawFrame(double dt, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
+	private void DrawFrame(double dt, VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
 						   VulkanQueue graphicsQueue, VulkanQueue presentQueue) {
 		currentTime += dt;
 		
@@ -1065,12 +1058,12 @@ public unsafe class HelloTriangleApplication
 		}
 		catch (ErrorOutOfDateKhrException)
 		{
-			RecreateSwapchain(physicalDevice, device, graphicsQueue);
+			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue);
 			return;
 		}
 		catch (SuboptimalKhrException)
 		{
-			RecreateSwapchain(physicalDevice, device, graphicsQueue);
+			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue);
 			return;
 		}
 
@@ -1102,17 +1095,17 @@ public unsafe class HelloTriangleApplication
 		}
 		catch (ErrorOutOfDateKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain(physicalDevice, device, graphicsQueue);
+			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue);
 			return;
 		}
 		catch (SuboptimalKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain(physicalDevice, device, graphicsQueue);
+			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue);
 			return;
 		}
 		if (framebufferResized) {
 			framebufferResized = false;
-			RecreateSwapchain(physicalDevice, device, graphicsQueue);
+			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue);
 			return;
 		}
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
@@ -1155,10 +1148,6 @@ public unsafe class HelloTriangleApplication
 		renderPass!.Dispose();
 
 		CleanupSwapchain();
-
-		if (EnableValidationLayers) {
-			debugMessenger!.Dispose();
-		}
 
 		_surface!.Dispose();
 		instance.Dispose();
