@@ -52,7 +52,6 @@ public unsafe class HelloTriangleApplication
 	private readonly Illustrate.Window window;
 	private readonly VulkanContext vk;
 	
-	private VulkanKhrSwapchain? _khrSwapchain;
 	private VulkanSwapchain? swapchain;
 	private VulkanSwapchainImage[] swapchainImages = Array.Empty<VulkanSwapchainImage>();
 	private Format swapchainFormat;
@@ -699,9 +698,7 @@ public unsafe class HelloTriangleApplication
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Exclusive;
 		}
 
-		_khrSwapchain = device.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
-
-		swapchain = _khrSwapchain.CreateSwapchain(swapchainCreateInfo);
+		swapchain = device.KhrSwapchain.CreateSwapchain(swapchainCreateInfo);
 
 		swapchainImages = swapchain.GetImages();
 
@@ -1090,7 +1087,7 @@ public unsafe class HelloTriangleApplication
 			ImageIndices = new[]{imageIndex}
 		};
 		try {
-			_khrSwapchain!.QueuePresent(presentQueue, presentInfo);
+			device.KhrSwapchain.QueuePresent(presentQueue, presentInfo);
 		}
 		catch (ErrorOutOfDateKhrException) {
 			framebufferResized = false;
