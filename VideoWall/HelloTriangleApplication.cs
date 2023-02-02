@@ -11,13 +11,20 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using SilkNetConvenience;
 using SilkNetConvenience.Assimp.Wrappers;
-using SilkNetConvenience.CreateInfo;
-using SilkNetConvenience.CreateInfo.Barriers;
-using SilkNetConvenience.CreateInfo.Descriptors;
-using SilkNetConvenience.CreateInfo.EXT;
-using SilkNetConvenience.CreateInfo.Images;
-using SilkNetConvenience.CreateInfo.Pipelines;
-using SilkNetConvenience.Wrappers;
+using SilkNetConvenience.Barriers;
+using SilkNetConvenience.Buffers;
+using SilkNetConvenience.CommandBuffers;
+using SilkNetConvenience.Descriptors;
+using SilkNetConvenience.Devices;
+using SilkNetConvenience.Exceptions.ResultExceptions;
+using SilkNetConvenience.EXT;
+using SilkNetConvenience.Images;
+using SilkNetConvenience.Instances;
+using SilkNetConvenience.KHR;
+using SilkNetConvenience.Memory;
+using SilkNetConvenience.Pipelines;
+using SilkNetConvenience.Queues;
+using SilkNetConvenience.RenderPasses;
 using SixLabors.ImageSharp.PixelFormats;
 using VideoWall.Exceptions;
 using File = System.IO.File;
@@ -45,19 +52,19 @@ public unsafe class HelloTriangleApplication
 	private readonly Illustrate.Window window;
 	private readonly VulkanContext vk;
 	
-	private ExtDebugUtils? debugUtils;
-	private DebugUtilsMessengerEXT debugMessenger;
+	private VulkanDebugUtils? debugUtils;
+	private VulkanDebugUtilsMessenger? debugMessenger;
 
-	private KhrSurface? _khrSurface;
-	private SurfaceKHR _surface;
+	private VulkanKhrSurface? _khrSurface;
+	private VulkanSurface? _surface;
 
 	private VulkanPhysicalDevice? _physicalDevice;
 	private VulkanDevice? _device;
 	private VulkanQueue? _graphicsQueue;
 	private VulkanQueue? _presentQueue;
 
-	private KhrSwapchain? _khrSwapchain;
-	private SwapchainKHR swapchain;
+	private VulkanKhrSwapchain? _khrSwapchain;
+	private VulkanSwapchain? swapchain;
 	private VulkanSwapchainImage[] swapchainImages = Array.Empty<VulkanSwapchainImage>();
 	private Format swapchainFormat;
 	private Extent2D swapchainExtent;
@@ -401,7 +408,7 @@ public unsafe class HelloTriangleApplication
 				ImageView = textureImageView!.ImageView,
 				ImageLayout = ImageLayout.ShaderReadOnlyOptimal
 			};
-			var writeBufferInfo = new WriteDescriptorSetInfo {
+			var writeBufferInfo = new WriteDescriptorSetInformation {
 				DstSet = frame.DescriptorSet.DescriptorSet,
 				DstBinding = 0,
 				DstArrayElement = 0,
@@ -409,7 +416,7 @@ public unsafe class HelloTriangleApplication
 				DescriptorCount = 1,
 				BufferInfo = new[]{bufferInfo}
 			};
-			var writeImageInfo = new WriteDescriptorSetInfo {
+			var writeImageInfo = new WriteDescriptorSetInformation {
 				DstSet = frame.DescriptorSet.DescriptorSet,
 				DstBinding = 1,
 				DescriptorType = DescriptorType.CombinedImageSampler,
@@ -491,13 +498,10 @@ public unsafe class HelloTriangleApplication
 		
 		DebugUtilsMessengerCreateInformation debugCreateInfo = new ();
 		if (EnableValidationLayers) {
-			createInfo.EnabledLayerNames = ValidationLayers;
+			createInfo.EnabledLayers = ValidationLayers;
 
 			PopulateDebugMessengerCreateInfo(ref debugCreateInfo);
 			createInfo.DebugUtilsMessengerCreateInfo = debugCreateInfo;
-		}
-		else {
-			createInfo.EnabledLayerNames = Array.Empty<string>();
 		}
 
 		return vk.CreateInstance(createInfo);
@@ -527,7 +531,7 @@ public unsafe class HelloTriangleApplication
 		var createInfo = new DebugUtilsMessengerCreateInformation();
 		PopulateDebugMessengerCreateInfo(ref createInfo);
 
-		debugMessenger = debugUtils!.CreateDebugUtilsMessenger(instance.Instance, createInfo);
+		debugMessenger = debugUtils!.CreateDebugUtilsMessenger(createInfo);
 	}
 
 	private static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
@@ -541,7 +545,7 @@ public unsafe class HelloTriangleApplication
 
 	private void CreateSurface(VulkanInstance instance) {
 		_khrSurface = instance.GetKhrSurfaceExtension() ?? throw new NotSupportedException("Could not create a KHR Surface");
-		_surface = window.VkSurface!.Create<AllocationCallbacks>(instance.Instance.ToHandle(), null).ToSurface();
+		_surface = _khrSurface.CreateSurface(window.VkSurface!);
 	}
 
 	private void PickPhysicalDevice(VulkanInstance instance) {
@@ -553,15 +557,15 @@ public unsafe class HelloTriangleApplication
 		var queueFamilyIndices = FindQueueFamilies(device);
 		var extensionsSupported = CheckDeviceExtensionSupport(device);
 
-		var swapChainAdequate = false;
+		var swapchainAdequate = false;
 		if (extensionsSupported) {
-			var swapChainSupport = QuerySwapchainSupport(device);
-			swapChainAdequate = swapChainSupport.Formats.Any() && swapChainSupport.PresentModes.Any();
+			var swapchainSupport = QuerySwapchainSupport(device);
+			swapchainAdequate = swapchainSupport.Formats.Any() && swapchainSupport.PresentModes.Any();
 		}
 
 		var supportedFeatures = device.GetFeatures();
 		
-		return queueFamilyIndices.IsComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.SamplerAnisotropy;
+		return queueFamilyIndices.IsComplete() && extensionsSupported && swapchainAdequate && supportedFeatures.SamplerAnisotropy;
 	}
 
 	private bool CheckDeviceExtensionSupport(VulkanPhysicalDevice physicalDevice) {
@@ -580,7 +584,7 @@ public unsafe class HelloTriangleApplication
 				queueFamilyIndices.GraphicsFamily = i;
 			}
 
-			_khrSurface!.GetPhysicalDeviceSurfaceSupport(physicalDevice.PhysicalDevice, i, _surface, out var supported);
+			var supported = _khrSurface!.GetPhysicalDeviceSurfaceSupport(physicalDevice, i, _surface!);
 			if (supported) {
 				queueFamilyIndices.PresentFamily = i;
 			}
@@ -591,26 +595,12 @@ public unsafe class HelloTriangleApplication
 		return queueFamilyIndices;
 	}
 
-	public SwapChainSupportDetails QuerySwapchainSupport(VulkanPhysicalDevice physicalDevice) {
-		var details = new SwapChainSupportDetails();
-
-		_khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice.PhysicalDevice, _surface, out details.Capabilities);
-
-		uint formatCount = 0;
-		_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice.PhysicalDevice, _surface, ref formatCount, null);
-		details.Formats = new SurfaceFormatKHR[formatCount];
-		fixed (SurfaceFormatKHR* formatsPointer = details.Formats) {
-			_khrSurface!.GetPhysicalDeviceSurfaceFormats(physicalDevice.PhysicalDevice, _surface, ref formatCount, formatsPointer);
-		}
-		
-		uint presentModesCount = 0;
-		_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice.PhysicalDevice, _surface, ref presentModesCount, null);
-		details.PresentModes = new PresentModeKHR[presentModesCount];
-		fixed (PresentModeKHR* presentModesPointer = details.PresentModes) {
-			_khrSurface!.GetPhysicalDeviceSurfacePresentModes(physicalDevice.PhysicalDevice, _surface, ref presentModesCount, presentModesPointer);
-		}
-
-		return details;
+	public SwapchainSupportDetails QuerySwapchainSupport(VulkanPhysicalDevice physicalDevice) {
+		return new SwapchainSupportDetails {
+			Capabilities = _khrSurface!.GetPhysicalDeviceSurfaceCapabilities(physicalDevice, _surface!),
+			Formats = _khrSurface.GetPhysicalDeviceSurfaceFormats(physicalDevice, _surface!),
+			PresentModes = _khrSurface.GetPhysicalDeviceSurfacePresentModes(physicalDevice, _surface!)
+		};
 	}
 
 	public void CreateLogicalDevice() {
@@ -637,8 +627,8 @@ public unsafe class HelloTriangleApplication
 		var deviceCreateInfo = new DeviceCreateInformation {
 			QueueCreateInfos = queueCreateInfos,
 			EnabledFeatures = features,
-			EnabledExtensionNames = DeviceExtensions,
-			EnabledLayerNames = ValidationLayers
+			EnabledExtensions = DeviceExtensions,
+			EnabledLayers = ValidationLayers
 		};
 
 		_device = _physicalDevice!.CreateDevice(deviceCreateInfo);
@@ -647,7 +637,7 @@ public unsafe class HelloTriangleApplication
 		_presentQueue = _device.GetDeviceQueue(queueFamilyIndices.PresentFamily.Value, 0);
 	}
 
-	private void RecreateSwapChain() {
+	private void RecreateSwapchain() {
 		Vector2D<int> framebufferSize;
 		do {
 			framebufferSize = window.FramebufferSize;
@@ -675,7 +665,7 @@ public unsafe class HelloTriangleApplication
 		foreach (var imageView in swapchainImageViews) {
 			imageView.Dispose();
 		}
-		_khrSwapchain!.DestroySwapchain(_device!.Device, swapchain);
+		swapchain!.Dispose();
 	}
 
 	private void CreateSwapchain() {
@@ -688,9 +678,8 @@ public unsafe class HelloTriangleApplication
 			imageCount = support.Capabilities.MaxImageCount;
 		}
 
-		var swapchainCreateInfo = new SwapchainCreateInfoKHR {
-			SType = StructureType.SwapchainCreateInfoKhr,
-			Surface = _surface,
+		var swapchainCreateInfo = new SwapchainCreateInformation {
+			Surface = _surface!,
 			MinImageCount = imageCount,
 			ImageExtent = extent,
 			ImageFormat = surfaceFormat.Format,
@@ -705,26 +694,20 @@ public unsafe class HelloTriangleApplication
 		};
 
 		var queueFamilies = FindQueueFamilies(_physicalDevice!);
-		var queueFamilyIndices = stackalloc [] { queueFamilies.GraphicsFamily!.Value, queueFamilies.PresentFamily!.Value };
+		var queueFamilyIndices = new [] { queueFamilies.GraphicsFamily!.Value, queueFamilies.PresentFamily!.Value };
 		if (queueFamilies.GraphicsFamily != queueFamilies.PresentFamily) {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Concurrent;
-			swapchainCreateInfo.QueueFamilyIndexCount = 2;
-			swapchainCreateInfo.PQueueFamilyIndices = queueFamilyIndices;
+			swapchainCreateInfo.QueueFamilyIndices = queueFamilyIndices;
 		}
 		else {
 			swapchainCreateInfo.ImageSharingMode = SharingMode.Exclusive;
-			swapchainCreateInfo.QueueFamilyIndexCount = 0;
-			swapchainCreateInfo.PQueueFamilyIndices = null;
 		}
 
 		_khrSwapchain = _device!.GetKhrSwapchainExtension() ?? throw new NotSupportedException("VK_KHR_swapchain extension not found.");
 
-		if (_khrSwapchain!.CreateSwapchain(_device!.Device, swapchainCreateInfo, null, out swapchain) != Result.Success) {
-			throw new Exception("Failed to create swapchain");
-		}
+		swapchain = _khrSwapchain.CreateSwapchain(swapchainCreateInfo);
 
-		var images = _khrSwapchain.GetSwapchainImages(_device!.Device, swapchain);
-		swapchainImages = images.Select(i => new VulkanSwapchainImage(_device, i)).ToArray();
+		swapchainImages = swapchain.GetImages();
 
 		swapchainFormat = surfaceFormat.Format;
 		swapchainExtent = extent;
@@ -995,7 +978,7 @@ public unsafe class HelloTriangleApplication
 	}
 
 	private void CreateCommandBuffers() {
-		var commandBuffers = commandPool!.AllocateCommandBuffers((uint)renderFrames.Length, CommandBufferLevel.Primary);
+		var commandBuffers = commandPool!.AllocateCommandBuffers((uint)renderFrames.Length);
 
 		for (var i = 0; i < renderFrames.Length; i++) {
 			renderFrames[i].CommandBuffer = commandBuffers[i];
@@ -1071,14 +1054,19 @@ public unsafe class HelloTriangleApplication
 		var frame = renderFrames[currentFrame];
 		frame.InFlightFence!.Wait();
 
-		uint imageIndex = 0;
-		var acquireResult = _khrSwapchain!.AcquireNextImage(_device!.Device, swapchain, int.MaxValue, frame.ImageAvailableSemaphore!.Semaphore, default, ref imageIndex);
-		if (acquireResult == Result.ErrorOutOfDateKhr) {
-			RecreateSwapChain();
+		uint imageIndex;
+		try {
+			imageIndex = swapchain!.AcquireNextImage(frame.ImageAvailableSemaphore!);
+		}
+		catch (ErrorOutOfDateKhrException)
+		{
+			RecreateSwapchain();
 			return;
 		}
-		if (acquireResult != Result.Success && acquireResult != Result.SuboptimalKhr) {
-			throw new Exception("failed to acquire next image");
+		catch (SuboptimalKhrException)
+		{
+			RecreateSwapchain();
+			return;
 		}
 
 		frame.InFlightFence.Reset();
@@ -1089,32 +1077,38 @@ public unsafe class HelloTriangleApplication
 		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;
-		var signalSemaphores = stackalloc[] { frame.RenderFinishedSemaphore!.Semaphore };
+		var signalSemaphores = new[] { frame.RenderFinishedSemaphore!.Semaphore };
 
 		_graphicsQueue!.Submit(new SubmitInformation {
 			WaitSemaphores = new[]{ frame.ImageAvailableSemaphore!.Semaphore },
-			SignalSemaphores = new[]{frame.RenderFinishedSemaphore!.Semaphore},
+			SignalSemaphores = signalSemaphores,
 			CommandBuffers = new[]{buffer.CommandBuffer},
 			WaitDstStageMask = new[] { PipelineStageFlags.ColorAttachmentOutputBit }
 		}, frame.InFlightFence);
 
-		var swapchains = stackalloc [] { swapchain };
-		var presentInfo = new PresentInfoKHR {
-			SType = StructureType.PresentInfoKhr,
-			WaitSemaphoreCount = 1,
-			PWaitSemaphores = signalSemaphores,
-			SwapchainCount = 1,
-			PSwapchains = swapchains,
-			PImageIndices = &imageIndex
+		var swapchains = new [] { swapchain.Swapchain };
+		var presentInfo = new PresentInformation {
+			WaitSemaphores = signalSemaphores,
+			Swapchains = swapchains,
+			ImageIndices = new[]{imageIndex}
 		};
-		var presentResult = _khrSwapchain!.QueuePresent(_presentQueue!.Queue, presentInfo);
-		if (presentResult is Result.ErrorOutOfDateKhr or Result.SuboptimalKhr || framebufferResized) {
+		try {
+			_khrSwapchain!.QueuePresent(_presentQueue!, presentInfo);
+		}
+		catch (ErrorOutOfDateKhrException) {
 			framebufferResized = false;
-			RecreateSwapChain();
+			RecreateSwapchain();
 			return;
 		}
-		if (presentResult != Result.Success) {
-			throw new Exception("Failed to present queue");
+		catch (SuboptimalKhrException) {
+			framebufferResized = false;
+			RecreateSwapchain();
+			return;
+		}
+		if (framebufferResized) {
+			framebufferResized = false;
+			RecreateSwapchain();
+			return;
 		}
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
 	}
@@ -1154,15 +1148,15 @@ public unsafe class HelloTriangleApplication
 		graphicsPipeline!.Dispose();
 		pipelineLayout!.Dispose();
 		renderPass!.Dispose();
-		
+
 		CleanupSwapchain();
 
 		_device!.Dispose();
 		if (EnableValidationLayers) {
-			debugUtils!.DestroyDebugUtilsMessenger(instance.Instance, debugMessenger, null);
+			debugMessenger!.Dispose();
 		}
 
-		_khrSurface!.DestroySurface(instance.Instance, _surface, null);
+		_surface!.Dispose();
 		instance.Dispose();
 		vk.Dispose();
 		window.Dispose();
