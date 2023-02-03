@@ -48,6 +48,7 @@ public unsafe class HelloTriangleApplication
 
 	private readonly Illustrate.Window window;
 	private readonly VulkanContext vk;
+	private AppState? _appState;
 	
 	private VulkanSwapchain? swapchain;
 	private VulkanSwapchainImage[] swapchainImages = Array.Empty<VulkanSwapchainImage>();
@@ -103,19 +104,23 @@ public unsafe class HelloTriangleApplication
 		vk = new VulkanContext();
 	}
 
-	public void Run()
-	{
-		var (instance, physicalDevice, device, graphicsQueue, presentQueue, 
-			surface, commandPool, renderPass, pipelineLayout, graphicsPipeline) = InitVulkan();
-		MainLoop(instance, physicalDevice, device, graphicsQueue, presentQueue, 
-				 surface, commandPool, renderPass, pipelineLayout, graphicsPipeline);
-		CleanUp(instance);
+	public void Init() {
+		_appState = InitVulkan();
 	}
 
-	private (VulkanInstance, VulkanPhysicalDevice, VulkanDevice, 
-		VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface,
-		VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout,
-		VulkanPipeline graphicsPipeline) InitVulkan() {
+	public void Run() {
+		if (_appState == null) throw new Exception("Need to run Init first");
+		
+		MainLoop(_appState);
+	}
+
+	public void CleanUp() {
+		if (_appState == null) throw new Exception("Need to run Init first");
+
+		CleanUp(_appState.Instance);
+	}
+
+	private AppState InitVulkan() {
 		for (var i = 0; i < MaxFramesInFlight; i++) {
 			renderFrames[i] = new RenderFrame();
 		}
@@ -147,7 +152,7 @@ public unsafe class HelloTriangleApplication
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
 
-		return (instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, 
+		return new AppState(instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, 
 				   pipelineLayout, graphicsPipeline);
 	}
 
@@ -1009,23 +1014,16 @@ public unsafe class HelloTriangleApplication
 		buffer.End();
 	}
 
-	private void MainLoop(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
-						  VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface, 
-						  VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout,
-						  VulkanPipeline graphicsPipeline) {
-		window.Render += dt => DrawFrame(dt, instance, physicalDevice, device, graphicsQueue,
-										 presentQueue, surface, commandPool, renderPass, pipelineLayout, graphicsPipeline);
+	private void MainLoop(AppState appState) {
+		window.Render += dt => DrawFrame(dt, appState);
 		window.Resize += _ => framebufferResized = true;
 		window.Run();
-		device.WaitIdle();
+		appState.Device.WaitIdle();
 	}
 
 	private double currentTime;
 
-	private void DrawFrame(double dt, VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
-						   VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface,
-						   VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout,
-						   VulkanPipeline graphicsPipeline) {
+	private void DrawFrame(double dt, AppState appState) {
 		currentTime += dt;
 		
 		var frame = renderFrames[currentFrame];
@@ -1037,26 +1035,29 @@ public unsafe class HelloTriangleApplication
 		}
 		catch (ErrorOutOfDateKhrException)
 		{
-			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue, surface, commandPool, renderPass);
+			RecreateSwapchain(appState.Instance, appState.PhysicalDevice, appState.Device, appState.GraphicsQueue,
+							  appState.Surface, appState.CommandPool, appState.RenderPass);
 			return;
 		}
 		catch (SuboptimalKhrException)
 		{
-			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue, surface, commandPool, renderPass);
+			RecreateSwapchain(appState.Instance, appState.PhysicalDevice, appState.Device, appState.GraphicsQueue,
+							  appState.Surface, appState.CommandPool, appState.RenderPass);
 			return;
 		}
 
 		frame.InFlightFence.Reset();
 
 		frame.CommandBuffer!.Reset();
-		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, renderPass, pipelineLayout, graphicsPipeline);
+		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
+							appState.GraphicsPipeline);
 
 		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;
 		var signalSemaphores = new[] { frame.RenderFinishedSemaphore!.Semaphore };
 
-		graphicsQueue.Submit(new SubmitInformation {
+		appState.GraphicsQueue.Submit(new SubmitInformation {
 			WaitSemaphores = new[]{ frame.ImageAvailableSemaphore!.Semaphore },
 			SignalSemaphores = signalSemaphores,
 			CommandBuffers = new[]{buffer.CommandBuffer},
@@ -1070,21 +1071,24 @@ public unsafe class HelloTriangleApplication
 			ImageIndices = new[]{imageIndex}
 		};
 		try {
-			device.KhrSwapchain.QueuePresent(presentQueue, presentInfo);
+			appState.Device.KhrSwapchain.QueuePresent(appState.PresentQueue, presentInfo);
 		}
 		catch (ErrorOutOfDateKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue, surface, commandPool, renderPass);
+			RecreateSwapchain(appState.Instance, appState.PhysicalDevice, appState.Device, appState.GraphicsQueue,
+							  appState.Surface, appState.CommandPool, appState.RenderPass);
 			return;
 		}
 		catch (SuboptimalKhrException) {
 			framebufferResized = false;
-			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue, surface, commandPool, renderPass);
+			RecreateSwapchain(appState.Instance, appState.PhysicalDevice, appState.Device, appState.GraphicsQueue,
+							  appState.Surface, appState.CommandPool, appState.RenderPass);
 			return;
 		}
 		if (framebufferResized) {
 			framebufferResized = false;
-			RecreateSwapchain(instance, physicalDevice, device, graphicsQueue, surface, commandPool, renderPass);
+			RecreateSwapchain(appState.Instance, appState.PhysicalDevice, appState.Device, appState.GraphicsQueue,
+							  appState.Surface, appState.CommandPool, appState.RenderPass);
 			return;
 		}
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
