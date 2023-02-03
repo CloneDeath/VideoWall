@@ -1,3 +1,4 @@
+using System;
 using SilkNetConvenience.CommandBuffers;
 using SilkNetConvenience.Devices;
 using SilkNetConvenience.Instances;
@@ -8,7 +9,7 @@ using SilkNetConvenience.RenderPasses;
 
 namespace VideoWall; 
 
-public class AppState {
+public class AppState : IDisposable {
 	public VulkanInstance Instance { get; }
 	public VulkanPhysicalDevice PhysicalDevice { get; }
 	public VulkanDevice Device { get; }
@@ -35,4 +36,11 @@ public class AppState {
 		PipelineLayout = pipelineLayout;
 		GraphicsPipeline = graphicsPipeline;
 	}
+
+	public void Dispose() {
+		Instance.Dispose();
+		GC.SuppressFinalize(this);
+	}
+
+	~AppState() => Dispose();
 }

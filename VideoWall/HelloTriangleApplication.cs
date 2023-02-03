@@ -29,7 +29,7 @@ using File = System.IO.File;
 
 namespace VideoWall; 
 
-public unsafe class HelloTriangleApplication
+public unsafe class HelloTriangleApplication : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
 	private const int WIDTH = 800;
@@ -112,12 +112,6 @@ public unsafe class HelloTriangleApplication
 		if (_appState == null) throw new Exception("Need to run Init first");
 		
 		MainLoop(_appState);
-	}
-
-	public void CleanUp() {
-		if (_appState == null) throw new Exception("Need to run Init first");
-
-		CleanUp(_appState.Instance);
 	}
 
 	private AppState InitVulkan() {
@@ -1118,7 +1112,7 @@ public unsafe class HelloTriangleApplication
 		memory.UnmapMemory();
 	}
 
-	private void CleanUp(VulkanInstance instance) {
+	public void Dispose() {
 		foreach (var frame in renderFrames) {
 			frame.ImageAvailableSemaphore!.Dispose();
 			frame.RenderFinishedSemaphore!.Dispose();
@@ -1127,15 +1121,20 @@ public unsafe class HelloTriangleApplication
 
 		CleanupSwapchain();
 
-		instance.Dispose();
+		_appState!.Dispose();
 		vk.Dispose();
 		window.Dispose();
+		GC.SuppressFinalize(this);
 	}
-	
+
+	~HelloTriangleApplication() {
+		Dispose();
+	}
+
 	private static uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, 
-								DebugUtilsMessageTypeFlagsEXT messageTypes, 
-								DebugUtilsMessengerCallbackDataEXT* pCallbackData, 
-								void* pUserData) {
+									  DebugUtilsMessageTypeFlagsEXT messageTypes, 
+									  DebugUtilsMessengerCallbackDataEXT* pCallbackData, 
+									  void* pUserData) {
 		var message = Marshal.PtrToStringAnsi((nint)pCallbackData->PMessage) ?? string.Empty;
 		if (messageTypes.HasFlag(DebugUtilsMessageTypeFlagsEXT.ValidationBitExt)
 		    && messageSeverity.HasFlag(DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt)) {
