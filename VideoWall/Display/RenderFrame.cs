@@ -1,7 +1,6 @@
 using SilkNetConvenience.Barriers;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
-using SilkNetConvenience.Descriptors;
 using SilkNetConvenience.Memory;
 
 namespace VideoWall.Display; 
