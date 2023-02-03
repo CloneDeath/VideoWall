@@ -1,7 +1,7 @@
 using System;
 using Silk.NET.Vulkan;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public class SwapchainSupportDetails {
 	public SurfaceCapabilitiesKHR Capabilities;

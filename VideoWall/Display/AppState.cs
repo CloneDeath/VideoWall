@@ -7,7 +7,7 @@ using SilkNetConvenience.Pipelines;
 using SilkNetConvenience.Queues;
 using SilkNetConvenience.RenderPasses;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public class AppState : IDisposable {
 	public VulkanInstance Instance { get; }

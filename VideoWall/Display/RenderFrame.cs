@@ -4,7 +4,7 @@ using SilkNetConvenience.CommandBuffers;
 using SilkNetConvenience.Descriptors;
 using SilkNetConvenience.Memory;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public class RenderFrame {
 	public VulkanCommandBuffer? CommandBuffer;

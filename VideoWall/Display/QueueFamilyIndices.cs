@@ -1,4 +1,4 @@
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public class QueueFamilyIndices {
 	public uint? GraphicsFamily { get; set; }

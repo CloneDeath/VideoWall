@@ -24,10 +24,11 @@ using SilkNetConvenience.Pipelines;
 using SilkNetConvenience.Queues;
 using SilkNetConvenience.RenderPasses;
 using SixLabors.ImageSharp.PixelFormats;
+using VideoWall.Display.Entities;
 using VideoWall.Exceptions;
 using File = System.IO.File;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public unsafe class HelloTriangleApplication : IDisposable
 {
@@ -63,36 +64,9 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 	private bool framebufferResized;
 
-	private VulkanBuffer? vertexBuffer;
-	private VulkanBuffer? indexBuffer;
-
 	private VulkanImage? depthImage;
 	private VulkanDeviceMemory? depthImageMemory;
 	private VulkanImageView? depthImageView;
-
-	private readonly Vertex[] vertices = new[] {
-		new Vertex {
-			Position = new Vector3D<float>(0, 0, 0),
-			TexCoord = new Vector2D<float>(0, 0),
-			Color = new Vector3D<float>(1)
-		},
-		new Vertex {
-			Position = new Vector3D<float>(1, 0, 0),
-			TexCoord = new Vector2D<float>(1, 0),
-			Color = new Vector3D<float>(1)
-		},
-		new Vertex {
-			Position = new Vector3D<float>(1, 1, 0),
-			TexCoord = new Vector2D<float>(1, 1),
-			Color = new Vector3D<float>(1)
-		},
-		new Vertex {
-			Position = new Vector3D<float>(0, 1, 0),
-			TexCoord = new Vector2D<float>(0, 1),
-			Color = new Vector3D<float>(1)
-		},
-	};
-	private readonly uint[] indices = new uint[]{0, 1, 2, 2, 3, 0};
 
 	public HelloTriangleApplication() {
 		window = new Illustrate.Window("VideoWall", WIDTH, HEIGHT);
@@ -138,8 +112,12 @@ public unsafe class HelloTriangleApplication : IDisposable
 		var texture = CreateTextureImage(device, graphicsQueue, commandPool);
 		var imageView = CreateTextureImageView(device, texture);
 		var sampler = CreateTextureSampler(physicalDevice, device);
-		CreateVertexBuffer(device, graphicsQueue, commandPool);
-		CreateIndexBuffer(device, graphicsQueue, commandPool);
+		
+		foreach (var entity in _entities) {
+			CreateVertexBuffer(entity, device, graphicsQueue, commandPool);
+			CreateIndexBuffer(entity, device, graphicsQueue, commandPool);
+		}
+		
 		CreateUniformBuffers(device);
 		var descriptorPool = CreateDescriptorPool(device);
 		CreateDescriptorSets(device, descriptorPool, descriptorSetLayout, sampler, imageView);
@@ -885,27 +863,27 @@ public unsafe class HelloTriangleApplication : IDisposable
 		return device.CreateCommandPool(commandPoolCreateInfo);
 	}
 
-	private void CreateVertexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * vertices.Length);
+	private void CreateVertexBuffer(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * entity.Vertices.Length);
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		
 		using (stagingBuffer)
 		using (stagingBufferMemory) {
 			var data = stagingBufferMemory.MapMemory<Vertex>();
-			vertices.ToArray().AsSpan().CopyTo(data);
+			entity.Vertices.AsSpan().CopyTo(data);
 			stagingBufferMemory.UnmapMemory();
 		
-			(vertexBuffer, _) = CreateBuffer(device, bufferSize, 
+			(entity.VertexBuffer, entity.VertexBufferMemory) = CreateBuffer(device, bufferSize, 
 				BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit, 
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			CopyBuffer(graphicsQueue, stagingBuffer, vertexBuffer, bufferSize, commandPool);
+			CopyBuffer(graphicsQueue, stagingBuffer, entity.VertexBuffer, bufferSize, commandPool);
 		}
 	}
 
-	private void CreateIndexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize =  sizeof(int) * (uint)indices.Length;
+	private void CreateIndexBuffer(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+		var bufferSize =  sizeof(int) * (uint)entity.Indices.Length;
 
 		var (stagingBuffer, stagingMemory) = CreateBuffer(device, bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
@@ -913,14 +891,14 @@ public unsafe class HelloTriangleApplication : IDisposable
 		using (stagingBuffer)
 		using (stagingMemory) {
 			var data = stagingMemory.MapMemory<uint>();
-			indices.ToArray().AsSpan().CopyTo(data);
+			entity.Indices.AsSpan().CopyTo(data);
 			stagingMemory.UnmapMemory();
 
-			(indexBuffer, _) = CreateBuffer(device, bufferSize,
+			(entity.IndexBuffer, entity.IndexBufferMemory) = CreateBuffer(device, bufferSize,
 				BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			CopyBuffer(graphicsQueue, stagingBuffer, indexBuffer, bufferSize, commandPool);
+			CopyBuffer(graphicsQueue, stagingBuffer, entity.IndexBuffer, bufferSize, commandPool);
 		}
 	}
 
@@ -961,9 +939,9 @@ public unsafe class HelloTriangleApplication : IDisposable
 		}
 	}
 
-	private void RecordCommandBuffer(VulkanCommandBuffer buffer, int index, VulkanRenderPass renderPass, 
+	private void RecordCommandBuffer(VulkanCommandBuffer cmd, int index, VulkanRenderPass renderPass, 
 									 VulkanPipelineLayout pipelineLayout, VulkanPipeline graphicsPipeline) {
-		buffer.Begin();
+		cmd.Begin();
 		
 		var colorClear = new ClearValue {
 			Color = new ClearColorValue(0, 0, 0, 1)
@@ -978,12 +956,9 @@ public unsafe class HelloTriangleApplication : IDisposable
 			ClearValues = new []{colorClear, depthClear}
 		};
 		
-		buffer.BeginRenderPass(renderPassBegin, SubpassContents.Inline);
-		buffer.BindPipeline(graphicsPipeline);
+		cmd.BeginRenderPass(renderPassBegin, SubpassContents.Inline);
+		cmd.BindPipeline(graphicsPipeline);
 		
-		buffer.BindVertexBuffer(0, vertexBuffer!.Buffer);
-		buffer.BindIndexBuffer(indexBuffer!, 0, IndexType.Uint32);
-
 		var viewport = new Viewport {
 			Height = swapchainExtent.Height,
 			Width = swapchainExtent.Width,
@@ -992,20 +967,22 @@ public unsafe class HelloTriangleApplication : IDisposable
 			MaxDepth = 1,
 			MinDepth = 0
 		};
-		buffer.SetViewport(0, viewport);
-
 		var scissor = new Rect2D {
 			Offset = new Offset2D(0, 0),
 			Extent = swapchainExtent
 		};
-		buffer.SetScissor(0, scissor);
-
-		buffer.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
-		buffer.DrawIndexed((uint)indices.Length);
-
-		buffer.EndRenderPass();
-
-		buffer.End();
+		
+		foreach (var entity in _entities) {
+			cmd.BindVertexBuffer(0, entity.VertexBuffer!);
+			cmd.BindIndexBuffer(entity.IndexBuffer!, 0, IndexType.Uint32);
+			cmd.SetViewport(0, viewport);
+			cmd.SetScissor(0, scissor);
+			cmd.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
+			cmd.DrawIndexed((uint)entity.Indices.Length);
+		}
+		
+		cmd.EndRenderPass();
+		cmd.End();
 	}
 
 	private void MainLoop(AppState appState) {
@@ -1149,5 +1126,10 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 		Console.WriteLine($"Vulkan - " + message);
 		return Vk.False;
+	}
+
+	private readonly List<EntityData> _entities = new();
+	public void AddEntity(IEntity entity) {
+		_entities.Add(new EntityData(entity));
 	}
 }

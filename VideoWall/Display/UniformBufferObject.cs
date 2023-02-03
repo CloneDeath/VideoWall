@@ -1,6 +1,6 @@
 using Silk.NET.Maths;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public struct UniformBufferObject {
 	public Matrix4X4<float> model;

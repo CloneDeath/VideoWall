@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public struct Vertex {
 	public Vector3D<float> Position;
