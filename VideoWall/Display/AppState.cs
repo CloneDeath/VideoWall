@@ -1,11 +1,13 @@
 using System;
 using SilkNetConvenience.CommandBuffers;
 using SilkNetConvenience.Devices;
+using SilkNetConvenience.Images;
 using SilkNetConvenience.Instances;
 using SilkNetConvenience.KHR;
 using SilkNetConvenience.Pipelines;
 using SilkNetConvenience.Queues;
 using SilkNetConvenience.RenderPasses;
+using VideoWall.Display.Descriptors;
 
 namespace VideoWall.Display; 
 
@@ -20,11 +22,13 @@ public class AppState : IDisposable {
 	public VulkanRenderPass RenderPass { get; }
 	public VulkanPipelineLayout PipelineLayout { get; }
 	public VulkanPipeline GraphicsPipeline { get; }
+	public VulkanSampler Sampler { get; }
+	public DescriptorManager DescriptorManager { get; }
 
-	public AppState(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
-					VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface, 
-					VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout, 
-					VulkanPipeline graphicsPipeline) {
+	public AppState(VulkanInstance instance, VulkanPhysicalDevice physicalDevice, VulkanDevice device,
+					VulkanQueue graphicsQueue, VulkanQueue presentQueue, VulkanSurface surface,
+					VulkanCommandPool commandPool, VulkanRenderPass renderPass, VulkanPipelineLayout pipelineLayout,
+					VulkanPipeline graphicsPipeline, VulkanSampler sampler, DescriptorManager descriptorManager) {
 		Instance = instance;
 		PhysicalDevice = physicalDevice;
 		Device = device;
@@ -35,6 +39,8 @@ public class AppState : IDisposable {
 		RenderPass = renderPass;
 		PipelineLayout = pipelineLayout;
 		GraphicsPipeline = graphicsPipeline;
+		Sampler = sampler;
+		DescriptorManager = descriptorManager;
 	}
 
 	public void Dispose() {

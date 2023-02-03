@@ -1,4 +1,5 @@
 using Silk.NET.Maths;
+using SixLabors.ImageSharp;
 using VideoWall.Display;
 
 namespace VideoWall; 
@@ -6,8 +7,9 @@ namespace VideoWall;
 public class Frame : IEntity {
 	private readonly Vector3D<float> _offset;
 
-	public Frame(Vector3D<float> offset) {
+	public Frame(Vector3D<float> offset, string imagePath) {
 		_offset = offset;
+		Image = Image.Load(imagePath);
 	}
 
 	public Vertex[] Vertices => new Vertex[] {
@@ -33,4 +35,5 @@ public class Frame : IEntity {
 		},
 	};
 	public uint[] Indices { get; } = {0, 1, 2, 2, 3, 0};
+	public Image Image { get; }
 }

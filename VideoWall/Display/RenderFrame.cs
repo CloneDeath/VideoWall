@@ -14,6 +14,4 @@ public class RenderFrame {
 
 	public VulkanBuffer? UniformBuffer;
 	public VulkanDeviceMemory? UniformBufferMemory;
-
-	public VulkanDescriptorSet? DescriptorSet;
 }

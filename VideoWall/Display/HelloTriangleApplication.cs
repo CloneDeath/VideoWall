@@ -12,7 +12,6 @@ using SilkNetConvenience;
 using SilkNetConvenience.Barriers;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
-using SilkNetConvenience.Descriptors;
 using SilkNetConvenience.Devices;
 using SilkNetConvenience.Exceptions.ResultExceptions;
 using SilkNetConvenience.EXT;
@@ -24,6 +23,7 @@ using SilkNetConvenience.Pipelines;
 using SilkNetConvenience.Queues;
 using SilkNetConvenience.RenderPasses;
 using SixLabors.ImageSharp.PixelFormats;
+using VideoWall.Display.Descriptors;
 using VideoWall.Display.Entities;
 using VideoWall.Exceptions;
 using File = System.IO.File;
@@ -35,8 +35,6 @@ public unsafe class HelloTriangleApplication : IDisposable
 	private const int MaxFramesInFlight = 2;
 	private const int WIDTH = 800;
 	private const int HEIGHT = 600;
-
-	private const string TEXTURE_PATH = "models/viking_room.png";
 
 	private readonly string[] ValidationLayers = new[] {
 		"VK_LAYER_KHRONOS_validation"
@@ -103,29 +101,29 @@ public unsafe class HelloTriangleApplication : IDisposable
 		CreateSwapchain(instance, physicalDevice, device, surface);
 		CreateImageViews(device);
 		var renderPass = CreateRenderPass(physicalDevice, device);
-		var descriptorSetLayout = CreateDescriptorSetLayout(device);
-		var pipelineLayout = device.CreatePipelineLayout(descriptorSetLayout);
+		var descriptorManager = new DescriptorManager(device);
+		var pipelineLayout = device.CreatePipelineLayout(descriptorManager.DescriptorSetLayout);
 		var graphicsPipeline = CreateGraphicsPipeline(device, renderPass, pipelineLayout);
 		var commandPool = CreateCommandPool(instance, physicalDevice, device, surface);
 		CreateDepthResources(physicalDevice, device, graphicsQueue, commandPool);
 		CreateFramebuffers(device, renderPass);
-		var texture = CreateTextureImage(device, graphicsQueue, commandPool);
-		var imageView = CreateTextureImageView(device, texture);
+		
 		var sampler = CreateTextureSampler(physicalDevice, device);
 		
 		foreach (var entity in _entities) {
+			CreateTextureImage(entity, device, graphicsQueue, commandPool);
+			CreateTextureImageView(entity, device);
+			
 			CreateVertexBuffer(entity, device, graphicsQueue, commandPool);
 			CreateIndexBuffer(entity, device, graphicsQueue, commandPool);
 		}
 		
 		CreateUniformBuffers(device);
-		var descriptorPool = CreateDescriptorPool(device);
-		CreateDescriptorSets(device, descriptorPool, descriptorSetLayout, sampler, imageView);
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
 
 		return new AppState(instance, physicalDevice, device, graphicsQueue, presentQueue, surface, commandPool, renderPass, 
-				   pipelineLayout, graphicsPipeline);
+				   pipelineLayout, graphicsPipeline, sampler, descriptorManager);
 	}
 
 	private void CreateDepthResources(VulkanPhysicalDevice physicalDevice, VulkanDevice device, 
@@ -166,7 +164,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 	private VulkanSampler CreateTextureSampler(VulkanPhysicalDevice physicalDevice, VulkanDevice device) {
 		var properties = physicalDevice.GetProperties();
-		var createInfo = new SamplerCreateInformation {
+		return device.CreateSampler(new SamplerCreateInformation {
 			MinFilter = Filter.Linear,
 			MagFilter = Filter.Linear,
 			AddressModeU = SamplerAddressMode.Repeat,
@@ -182,12 +180,11 @@ public unsafe class HelloTriangleApplication : IDisposable
 			MipLodBias = 0,
 			MinLod = 0,
 			MaxLod = 0
-		};
-		return device.CreateSampler(createInfo);
+		});
 	}
 
-	private VulkanImageView CreateTextureImageView(VulkanDevice device, VulkanImage image) {
-		return CreateImageView(device, image, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
+	private void CreateTextureImageView(EntityData entity, VulkanDevice device) {
+		entity.TextureImageView = CreateImageView(device, entity.Texture!, Format.R8G8B8A8Srgb, ImageAspectFlags.ColorBit);
 	}
 
 	private VulkanImageView CreateImageView(VulkanDevice device, VulkanImage image, Format format, ImageAspectFlags aspectFlags) {
@@ -206,8 +203,8 @@ public unsafe class HelloTriangleApplication : IDisposable
 		return device.CreateImageView(viewInfo);
 	}
 
-	private VulkanImage CreateTextureImage(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var image = SixLabors.ImageSharp.Image.Load(TEXTURE_PATH);
+	private void CreateTextureImage(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+		var image = entity.Image;
 		var imageSize = image.Width * image.Height * 4;
 
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, (uint)imageSize, BufferUsageFlags.TransferSrcBit,
@@ -219,17 +216,15 @@ public unsafe class HelloTriangleApplication : IDisposable
 			image.CloneAs<Rgba32>().CopyPixelDataTo(data);
 			stagingBufferMemory.UnmapMemory();
 
-			var (textureImage, _) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+			(entity.Texture, entity.TextureMemory) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
 				ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 				MemoryPropertyFlags.DeviceLocalBit);
 
-			TransitionImageLayout(graphicsQueue, textureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
+			TransitionImageLayout(graphicsQueue, entity.Texture, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
 				ImageLayout.TransferDstOptimal, commandPool);
-			CopyBufferToImage(graphicsQueue, stagingBuffer, textureImage, (uint)image.Width, (uint)image.Height, commandPool);
-			TransitionImageLayout(graphicsQueue, textureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
+			CopyBufferToImage(graphicsQueue, stagingBuffer, entity.Texture, (uint)image.Width, (uint)image.Height, commandPool);
+			TransitionImageLayout(graphicsQueue, entity.Texture, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
 				ImageLayout.ShaderReadOnlyOptimal, commandPool);
-
-			return textureImage;
 		}
 	}
 
@@ -338,60 +333,6 @@ public unsafe class HelloTriangleApplication : IDisposable
 		});
 	}
 
-	private void CreateDescriptorSets(VulkanDevice device, VulkanDescriptorPool descriptorPool, 
-			VulkanDescriptorSetLayout descriptorSetLayout, VulkanSampler textureSampler, VulkanImageView textureImageView) {
-		var descriptorSets = descriptorPool.AllocateDescriptorSets(MaxFramesInFlight, descriptorSetLayout);
-		for (var i = 0; i < MaxFramesInFlight; i++) {
-			var frame = renderFrames[i];
-			frame.DescriptorSet = descriptorSets[i];
-
-			var bufferInfo = new DescriptorBufferInfo {
-				Buffer = frame.UniformBuffer!,
-				Offset = 0,
-				Range = (uint)sizeof(UniformBufferObject)
-			};
-			var imageInfo = new DescriptorImageInfo {
-				Sampler = textureSampler,
-				ImageView = textureImageView,
-				ImageLayout = ImageLayout.ShaderReadOnlyOptimal
-			};
-			var writeBufferInfo = new WriteDescriptorSetInformation {
-				DstSet = frame.DescriptorSet,
-				DstBinding = 0,
-				DstArrayElement = 0,
-				DescriptorType = DescriptorType.UniformBuffer,
-				DescriptorCount = 1,
-				BufferInfo = new[]{bufferInfo}
-			};
-			var writeImageInfo = new WriteDescriptorSetInformation {
-				DstSet = frame.DescriptorSet,
-				DstBinding = 1,
-				DescriptorType = DescriptorType.CombinedImageSampler,
-				DescriptorCount = 1,
-				DstArrayElement = 0,
-				ImageInfo = new[]{imageInfo}
-			};
-			device.UpdateDescriptorSets(writeBufferInfo, writeImageInfo);
-		}
-	}
-
-	private VulkanDescriptorPool CreateDescriptorPool(VulkanDevice device) {
-		var createInfo = new DescriptorPoolCreateInformation {
-			PoolSizes = new [] {
-				new DescriptorPoolSize {
-					Type = DescriptorType.UniformBuffer,
-					DescriptorCount = MaxFramesInFlight
-				},
-				new DescriptorPoolSize {
-					Type = DescriptorType.CombinedImageSampler,
-					DescriptorCount = MaxFramesInFlight
-				}
-			},
-			MaxSets = MaxFramesInFlight
-		};
-		return device.CreateDescriptorPool(createInfo);
-	}
-
 	private void CreateUniformBuffers(VulkanDevice device) {
 		var bufferSize = (uint)sizeof(UniformBufferObject);
 
@@ -404,26 +345,6 @@ public unsafe class HelloTriangleApplication : IDisposable
 		}
 	}
 
-	private VulkanDescriptorSetLayout CreateDescriptorSetLayout(VulkanDevice device) {
-		DescriptorSetLayoutBindingInformation uboLayoutBinding = new() {
-			Binding = 0,
-			DescriptorType = DescriptorType.UniformBuffer,
-			DescriptorCount = 1,
-			StageFlags = ShaderStageFlags.VertexBit
-		};
-
-		var samplerLayoutBinding = new DescriptorSetLayoutBindingInformation {
-			Binding = 1,
-			DescriptorCount = 1,
-			DescriptorType = DescriptorType.CombinedImageSampler,
-			StageFlags = ShaderStageFlags.FragmentBit
-		};
-		
-		var createInfo = new DescriptorSetLayoutCreateInformation {
-			Bindings = new[] { uboLayoutBinding, samplerLayoutBinding }
-		};
-		return device.CreateDescriptorSetLayout(createInfo);
-	}
 
 	private VulkanInstance CreateInstance() {
 		if (EnableValidationLayers && !CheckValidationLayerSupport()) {
@@ -940,7 +861,8 @@ public unsafe class HelloTriangleApplication : IDisposable
 	}
 
 	private void RecordCommandBuffer(VulkanCommandBuffer cmd, int index, VulkanRenderPass renderPass, 
-									 VulkanPipelineLayout pipelineLayout, VulkanPipeline graphicsPipeline) {
+									 VulkanPipelineLayout pipelineLayout, VulkanPipeline graphicsPipeline,
+									 DescriptorManager manager, VulkanSampler sampler) {
 		cmd.Begin();
 		
 		var colorClear = new ClearValue {
@@ -973,11 +895,15 @@ public unsafe class HelloTriangleApplication : IDisposable
 		};
 		
 		foreach (var entity in _entities) {
+			var renderFrame = renderFrames[currentFrame];
+			var set = manager.UpdateDescriptorSet((uint)currentFrame, renderFrame.UniformBuffer!, entity.TextureImageView!,
+												  sampler);
+			
 			cmd.BindVertexBuffer(0, entity.VertexBuffer!);
 			cmd.BindIndexBuffer(entity.IndexBuffer!, 0, IndexType.Uint32);
 			cmd.SetViewport(0, viewport);
 			cmd.SetScissor(0, scissor);
-			cmd.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, renderFrames[currentFrame].DescriptorSet!);
+			cmd.BindDescriptorSet(PipelineBindPoint.Graphics, pipelineLayout, 0, set);
 			cmd.DrawIndexed((uint)entity.Indices.Length);
 		}
 		
@@ -1021,7 +947,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 		frame.CommandBuffer!.Reset();
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
-							appState.GraphicsPipeline);
+							appState.GraphicsPipeline, appState.DescriptorManager, appState.Sampler);
 
 		UpdateUniformBuffer(currentFrame);
 
