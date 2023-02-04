@@ -7,9 +7,11 @@ namespace VideoWall;
 public class Frame : IEntity {
 	private readonly Vector3D<float> _offset;
 
-	public Frame(Vector3D<float> offset, string imagePath) {
+	public Image Image { get; }
+
+	public Frame(Vector3D<float> offset, Image image) {
 		_offset = offset;
-		Image = Image.Load(imagePath);
+		Image = image;
 	}
 
 	public Vertex[] Vertices => new Vertex[] {
@@ -35,5 +37,4 @@ public class Frame : IEntity {
 		},
 	};
 	public uint[] Indices { get; } = {0, 1, 2, 2, 3, 0};
-	public Image Image { get; }
 }
