@@ -912,17 +912,13 @@ public unsafe class HelloTriangleApplication : IDisposable
 	}
 
 	private void MainLoop(AppState appState) {
-		window.Render += dt => DrawFrame(dt, appState);
+		window.Render += _ => DrawFrame(appState);
 		window.Resize += _ => framebufferResized = true;
 		window.Run();
 		appState.Device.WaitIdle();
 	}
 
-	private double currentTime;
-
-	private void DrawFrame(double dt, AppState appState) {
-		currentTime += dt;
-		
+	private void DrawFrame(AppState appState) {
 		var frame = renderFrames[currentFrame];
 		frame.InFlightFence!.Wait();
 
@@ -994,8 +990,6 @@ public unsafe class HelloTriangleApplication : IDisposable
 	private const float Circle = 2 * MathF.PI; 
 
 	private void UpdateUniformBuffer(int frame) {
-		var time = (float)currentTime;
-
 		UniformBufferObject ubo = new()
 		{
 			model = Matrix4X4<float>.Identity,
