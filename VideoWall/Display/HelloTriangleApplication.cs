@@ -205,6 +205,14 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 	private void CreateTextureImage(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
 		var image = entity.Image;
+		(entity.Texture, entity.TextureMemory) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
+			 ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+			 MemoryPropertyFlags.DeviceLocalBit);
+		UpdateTextureImage(entity, device, graphicsQueue, commandPool);
+	}
+	
+	private void UpdateTextureImage(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+		var image = entity.Image;
 		var imageSize = image.Width * image.Height * 4;
 
 		var (stagingBuffer, stagingBufferMemory) = CreateBuffer(device, (uint)imageSize, BufferUsageFlags.TransferSrcBit,
@@ -216,14 +224,10 @@ public unsafe class HelloTriangleApplication : IDisposable
 			image.CloneAs<Rgba32>().CopyPixelDataTo(data);
 			stagingBufferMemory.UnmapMemory();
 
-			(entity.Texture, entity.TextureMemory) = CreateImage(device, (uint)image.Width, (uint)image.Height, Format.R8G8B8A8Srgb,
-				ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-				MemoryPropertyFlags.DeviceLocalBit);
-
-			TransitionImageLayout(graphicsQueue, entity.Texture, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
+			TransitionImageLayout(graphicsQueue, entity.Texture!, Format.R8G8B8A8Srgb, ImageLayout.Undefined,
 				ImageLayout.TransferDstOptimal, commandPool);
-			CopyBufferToImage(graphicsQueue, stagingBuffer, entity.Texture, (uint)image.Width, (uint)image.Height, commandPool);
-			TransitionImageLayout(graphicsQueue, entity.Texture, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
+			CopyBufferToImage(graphicsQueue, stagingBuffer, entity.Texture!, (uint)image.Width, (uint)image.Height, commandPool);
+			TransitionImageLayout(graphicsQueue, entity.Texture!, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal,
 				ImageLayout.ShaderReadOnlyOptimal, commandPool);
 		}
 	}
@@ -898,7 +902,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 			var renderFrame = renderFrames[currentFrame];
 			var set = manager.UpdateDescriptorSet((uint)currentFrame, renderFrame.UniformBuffer!, entity.TextureImageView!,
 												  sampler);
-			
+
 			cmd.BindVertexBuffer(0, entity.VertexBuffer!);
 			cmd.BindIndexBuffer(entity.IndexBuffer!, 0, IndexType.Uint32);
 			cmd.SetViewport(0, viewport);
@@ -945,6 +949,9 @@ public unsafe class HelloTriangleApplication : IDisposable
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
 							appState.GraphicsPipeline, appState.DescriptorManager, appState.Sampler);
 
+		foreach (var entity in _entities) {
+			UpdateTextureImage(entity, appState.Device, appState.GraphicsQueue, appState.CommandPool);
+		}
 		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;

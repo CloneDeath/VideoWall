@@ -1,3 +1,4 @@
+using System;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.Images;
 using SilkNetConvenience.Memory;
@@ -6,6 +7,8 @@ using SixLabors.ImageSharp;
 namespace VideoWall.Display.Entities; 
 
 public class EntityData {
+	public Guid Id { get; } = Guid.NewGuid();
+	
 	private readonly IEntity _entity;
 	
 	public VulkanBuffer? VertexBuffer;

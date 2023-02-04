@@ -25,6 +25,11 @@ public class CameraStream {
         }, token), token);
     }
 
+    public void Stop() {
+        _tokenSource.Cancel();
+        _tokenSource = new CancellationTokenSource();
+    }
+
     public Task<byte[]> GetSingleImage() {
         var tokenSource = new CancellationTokenSource();
         var token = tokenSource.Token;
