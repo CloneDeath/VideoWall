@@ -719,7 +719,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 				RasterizerDiscardEnable = false,
 				PolygonMode = PolygonMode.Fill,
 				LineWidth = 1,
-				CullMode = CullModeFlags.FrontBit,
+				CullMode = CullModeFlags.BackBit,
 				FrontFace = FrontFace.Clockwise,
 				DepthBiasEnable = false
 			},
@@ -998,11 +998,11 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 		UniformBufferObject ubo = new()
 		{
-			model = Matrix4X4.CreateFromAxisAngle(new Vector3D<float>(0,0,1), time * Circle / 4),
+			model = Matrix4X4<float>.Identity,
 			view = Matrix4X4.CreateLookAt(
-				new Vector3D<float>(2, 2, 2), 
+				new Vector3D<float>(0, 0, -3), 
 				new Vector3D<float>(0, 0, 0), 
-				new Vector3D<float>(0, 0, 1)),
+				new Vector3D<float>(0, -1, 0)),
 			proj = Matrix4X4.CreatePerspectiveFieldOfView(Circle / 8, 
 				swapchainExtent.Width / (float)swapchainExtent.Height, 
 				0.1f, 10.0f),
