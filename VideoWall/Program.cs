@@ -6,15 +6,13 @@ using VideoWall.Display;
 
 var ipCams = new[] {
 	"http://166.165.35.37/mjpg/video.mjpg",
-	"http://86.34.190.86:88/cgi-bin/faststream.jpg?stream=half&fps=15&rand=COUNTER",
 	
 	// http://www.insecam.org/en/view/368541/
 	"http://31.168.150.154:82/mjpg/video.mjpg"
 };
 var positions = new[] {
 	new Vector3D<float>(-1, -1, 0),
-	new Vector3D<float>(0, -1, 0),
-	new Vector3D<float>(-1, 0, 0)
+	new Vector3D<float>(0, -1, 0)
 };
 
 var frames = new List<Frame>();

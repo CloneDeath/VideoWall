@@ -1,7 +1,6 @@
+using Illustrate;
 using SilkNetConvenience.Barriers;
-using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
-using SilkNetConvenience.Memory;
 
 namespace VideoWall.Display; 
 
@@ -11,6 +10,5 @@ public class RenderFrame {
 	public VulkanSemaphore? RenderFinishedSemaphore;
 	public VulkanFence? InFlightFence;
 
-	public VulkanBuffer? UniformBuffer;
-	public VulkanDeviceMemory? UniformBufferMemory;
+	public BufferMemory? UniformBuffer;
 }

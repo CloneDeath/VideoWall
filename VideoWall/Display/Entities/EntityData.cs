@@ -1,8 +1,7 @@
 using System;
-using SilkNetConvenience.Buffers;
-using SilkNetConvenience.Images;
-using SilkNetConvenience.Memory;
-using SixLabors.ImageSharp;
+using Illustrate;
+using Silk.NET.Vulkan;
+using Image = SixLabors.ImageSharp.Image;
 
 namespace VideoWall.Display.Entities; 
 
@@ -11,15 +10,10 @@ public class EntityData {
 	
 	private readonly IEntity _entity;
 	
-	public VulkanBuffer? VertexBuffer;
-	public VulkanDeviceMemory? VertexBufferMemory;
+	public BufferMemory? VertexBuffer;
+	public BufferMemory? IndexBuffer;
 	
-	public VulkanBuffer? IndexBuffer;
-	public VulkanDeviceMemory? IndexBufferMemory;
-
-	public VulkanImage? Texture;
-	public VulkanDeviceMemory? TextureMemory;
-	public VulkanImageView? TextureImageView;
+	public Texture? Texture;
 
 	public EntityData(IEntity entity) {
 		_entity = entity;
@@ -28,4 +22,5 @@ public class EntityData {
 	public uint[] Indices => _entity.Indices;
 	public Vertex[] Vertices => _entity.Vertices;
 	public Image Image => _entity.Image;
+	public Extent2D ImageSize => new((uint)Image.Width, (uint)Image.Height);
 }
