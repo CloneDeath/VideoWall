@@ -5,14 +5,23 @@ using VideoWall;
 using VideoWall.Display;
 
 var ipCams = new[] {
+	// http://www.insecam.org/en/view/454956/
 	"http://166.165.35.37/mjpg/video.mjpg",
+	
+	// http://www.insecam.org/en/view/989315/
+	"http://104.251.136.19:8080/mjpg/video.mjpg",
+	
+	// http://www.insecam.org/en/view/504145/
+	"http://166.247.77.253:81/mjpg/video.mjpg",
 	
 	// http://www.insecam.org/en/view/368541/
 	"http://31.168.150.154:82/mjpg/video.mjpg"
 };
 var positions = new[] {
 	new Vector3D<float>(-1, -1, 0),
-	new Vector3D<float>(0, -1, 0)
+	new Vector3D<float>(0, -1, 0),
+	new Vector3D<float>(-1, 0, 0),
+	new Vector3D<float>(0, 0, 0)
 };
 
 var frames = new List<Frame>();
@@ -28,7 +37,7 @@ foreach (var ipCam in ipCams) {
 	cameraStreams.Add(cam);
 }
 
-using var app = new HelloTriangleApplication();
+using var app = new VideoWallApplication();
 for (var index = 0; index < frames.Count; index++) {
 	var frame = frames[index];
 	var position = positions[index];
@@ -36,8 +45,8 @@ for (var index = 0; index < frames.Count; index++) {
 	app.AddEntity(frame);
 }
 
-app.AddEntity(new Frame(new Vector3D<float>(0, 0, 0), Image.Load("textures/texture.jpg")));
-app.AddEntity(new Frame(new Vector3D<float>(1, 0, 0), Image.Load("textures/bird.png")));
+//app.AddEntity(new Frame(new Vector3D<float>(0, 0, 0), Image.Load("textures/texture.jpg")));
+//app.AddEntity(new Frame(new Vector3D<float>(1, 0, 0), Image.Load("textures/bird.png")));
 app.Init();
 app.Run();
 

@@ -28,7 +28,7 @@ using File = System.IO.File;
 
 namespace VideoWall.Display; 
 
-public unsafe class HelloTriangleApplication : IDisposable
+public unsafe class VideoWallApplication : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
 	private const int WIDTH = 800;
@@ -62,7 +62,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 
 	private Texture? depth;
 
-	public HelloTriangleApplication() {
+	public VideoWallApplication() {
 		window = new Window("VideoWall", WIDTH, HEIGHT);
 		if (window.VkSurface is null)
 		{
@@ -859,7 +859,7 @@ public unsafe class HelloTriangleApplication : IDisposable
 		GC.SuppressFinalize(this);
 	}
 
-	~HelloTriangleApplication() {
+	~VideoWallApplication() {
 		Dispose();
 	}
 
