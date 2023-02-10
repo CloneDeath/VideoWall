@@ -35,6 +35,7 @@
       <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj" />
       <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Vulkan\SilkNetConvenience.Vulkan.csproj" />
       <ProjectReference Include="..\VideoWall.Display\VideoWall.Display.csproj" />
+      <ProjectReference Include="..\VideoWall.Server\VideoWall.Server.csproj" />
     </ItemGroup>
 
 </Project>

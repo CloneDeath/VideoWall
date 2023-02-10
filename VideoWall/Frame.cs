@@ -1,10 +1,13 @@
+using System;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall.Display;
+using VideoWall.Server.Controllers;
 
 namespace VideoWall; 
 
-public class Frame : IEntity {
+public class Frame : IEntity, IFrame {
+	public Guid Id { get; } = Guid.NewGuid();
 	public Vector3D<float> Position { get; set; }
 
 	public Image Image { get; set; }

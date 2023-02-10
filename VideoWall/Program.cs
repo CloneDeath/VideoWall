@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall;
-using VideoWall.Display;
+using VideoWall.Server;
 
 var ipCams = new[] {
 	// http://www.insecam.org/en/view/454956/
@@ -37,18 +38,23 @@ foreach (var ipCam in ipCams) {
 	cameraStreams.Add(cam);
 }
 
-using var app = new VideoWallApplication();
+using var videoWall = new VideoWall.VideoWall();
 for (var index = 0; index < frames.Count; index++) {
 	var frame = frames[index];
 	var position = positions[index];
 	frame.Position = position;
-	app.AddEntity(frame);
+	videoWall.AddFrame(frame);
 }
 
 //app.AddEntity(new Frame(new Vector3D<float>(0, 0, 0), Image.Load("textures/texture.jpg")));
 //app.AddEntity(new Frame(new Vector3D<float>(1, 0, 0), Image.Load("textures/bird.png")));
-app.Init();
-app.Run();
+videoWall.Init();
+var wallTask = videoWall.Run();
+
+var server = new VideoServer(videoWall);
+var serverTask = server.Start();
+
+Task.WaitAll(wallTask, serverTask);
 
 foreach (var stream in cameraStreams) {
 	stream.Stop();
