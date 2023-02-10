@@ -1,7 +1,6 @@
 using SixLabors.ImageSharp;
-using VideoWall.Display;
 
-namespace VideoWall; 
+namespace VideoWall.Display; 
 
 public interface IEntity {
 	public Vertex[] Vertices { get; }

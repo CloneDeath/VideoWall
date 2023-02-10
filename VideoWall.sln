@@ -15,6 +15,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Illustrate", "External\Illu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SilkNetConvenience.Assimp", "External\SilkNetConvenience\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj", "{365FDBC4-1466-4C5F-BC86-8378A5B6346C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWall.Server", "VideoWall.Server\VideoWall.Server.csproj", "{1223C962-BFB9-4C6E-AF42-190ADEB627EF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWall.Display", "VideoWall.Display\VideoWall.Display.csproj", "{C7151041-65FD-4884-9DC9-C04D10B7382A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -37,6 +41,14 @@ Global
 		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{365FDBC4-1466-4C5F-BC86-8378A5B6346C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1223C962-BFB9-4C6E-AF42-190ADEB627EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1223C962-BFB9-4C6E-AF42-190ADEB627EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1223C962-BFB9-4C6E-AF42-190ADEB627EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1223C962-BFB9-4C6E-AF42-190ADEB627EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7151041-65FD-4884-9DC9-C04D10B7382A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7151041-65FD-4884-9DC9-C04D10B7382A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7151041-65FD-4884-9DC9-C04D10B7382A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7151041-65FD-4884-9DC9-C04D10B7382A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CDF5E8E7-2040-4E7B-A114-43B9C8388BED} = {B984A97D-8705-4EBB-B521-ADEF70D8F233}

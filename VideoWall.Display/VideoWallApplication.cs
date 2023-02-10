@@ -23,12 +23,12 @@ using SilkNetConvenience.Queues;
 using SilkNetConvenience.RenderPasses;
 using VideoWall.Display.Descriptors;
 using VideoWall.Display.Entities;
-using VideoWall.Exceptions;
+using VideoWall.Display.Exceptions;
 using File = System.IO.File;
 
 namespace VideoWall.Display; 
 
-public unsafe class VideoWallApplication : IDisposable
+public class VideoWallApplication : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
 	private const int WIDTH = 800;
@@ -176,7 +176,7 @@ public unsafe class VideoWallApplication : IDisposable
 		});
 	}
 
-	private void CreateUniformBuffers(VulkanDevice device) {
+	private unsafe void CreateUniformBuffers(VulkanDevice device) {
 		var bufferSize = (uint)sizeof(UniformBufferObject);
 
 		for (var i = 0; i < MaxFramesInFlight; i++) {
@@ -218,7 +218,7 @@ public unsafe class VideoWallApplication : IDisposable
 		return vk.CreateInstance(createInfo);
 	}
 
-	private string[] GetRequiredExtensions() {
+	private unsafe string[] GetRequiredExtensions() {
 		var glfwExtensions = window.VkSurface!.GetRequiredExtensions(out var glfwExtensionCount);
 		var extensions = SilkMarshal.PtrToStringArray((nint)glfwExtensions, (int)glfwExtensionCount);
 
@@ -242,7 +242,7 @@ public unsafe class VideoWallApplication : IDisposable
 		instance.DebugUtils.CreateDebugUtilsMessenger(createInfo);
 	}
 
-	private static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
+	private unsafe static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
 		createInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt
 		                             | DebugUtilsMessageSeverityFlagsEXT.WarningBitExt;
 		createInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt
@@ -276,7 +276,7 @@ public unsafe class VideoWallApplication : IDisposable
 
 	private bool CheckDeviceExtensionSupport(VulkanPhysicalDevice physicalDevice) {
 		var properties = physicalDevice.EnumerateExtensionProperties();
-		var propertyNames = properties.Select(p => SilkMarshal.PtrToString((nint)p.ExtensionName)).ToList();
+		var propertyNames = properties.Select(p => p.GetExtensionName()).ToList();
 		return DeviceExtensions.All(propertyNames.Contains);
 	}
 
@@ -824,7 +824,7 @@ public unsafe class VideoWallApplication : IDisposable
 
 	private const float Circle = 2 * MathF.PI; 
 
-	private void UpdateUniformBuffer(int frame) {
+	private unsafe void UpdateUniformBuffer(int frame) {
 		UniformBufferObject ubo = new()
 		{
 			model = Matrix4X4<float>.Identity,
@@ -863,7 +863,7 @@ public unsafe class VideoWallApplication : IDisposable
 		Dispose();
 	}
 
-	private static uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, 
+	private static unsafe uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, 
 									  DebugUtilsMessageTypeFlagsEXT messageTypes, 
 									  DebugUtilsMessengerCallbackDataEXT* pCallbackData, 
 									  void* pUserData) {

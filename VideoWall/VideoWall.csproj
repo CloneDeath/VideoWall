@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net6.0</TargetFramework>
@@ -33,9 +32,9 @@
     
     <ItemGroup>
       <ProjectReference Include="..\External\Illustrate\Illustrate\Illustrate.csproj" />
-      <ProjectReference Include="..\External\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj" />
       <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Assimp\SilkNetConvenience.Assimp.csproj" />
       <ProjectReference Include="..\External\SilkNetConvenience\SilkNetConvenience.Vulkan\SilkNetConvenience.Vulkan.csproj" />
+      <ProjectReference Include="..\VideoWall.Display\VideoWall.Display.csproj" />
     </ItemGroup>
 
 </Project>
