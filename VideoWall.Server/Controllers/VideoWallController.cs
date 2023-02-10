@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace VideoWall.Server.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("[controller]/[action]")]
 public class VideoWallController : ControllerBase {
 	private readonly IVideoWall _wall;
 
@@ -11,6 +11,6 @@ public class VideoWallController : ControllerBase {
 		_wall = wall;
 	}
 
-	[HttpGet("[action]", Name = "Frames")]
-	public IEnumerable<IFrame> Frames() => _wall.Frames;
+	[HttpGet]
+	public IEnumerable<IFrame> GetFrames() => _wall.Frames;
 }

@@ -13,8 +13,10 @@ public class VideoServer {
 	}
 	
 	public Task Start() {
-		var builder = WebApplication.CreateBuilder();
-
+		var builder = WebApplication.CreateBuilder(new WebApplicationOptions {
+			EnvironmentName = "Development"
+		});
+		
 		builder.Services.AddControllers();
 		builder.Services.AddEndpointsApiExplorer();
 		builder.Services.AddSwaggerGen();
@@ -22,10 +24,11 @@ public class VideoServer {
 
 		var app = builder.Build();
 
-		//if (app.Environment.IsDevelopment()) {
+		if (app.Environment.IsDevelopment()) {
+			app.UseDeveloperExceptionPage();
 			app.UseSwagger();
 			app.UseSwaggerUI();
-		//}
+		}
 
 		app.UseHttpsRedirection();
 		app.UseAuthorization();
