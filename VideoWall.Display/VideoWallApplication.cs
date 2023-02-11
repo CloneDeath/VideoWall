@@ -30,10 +30,8 @@ namespace VideoWall.Display;
 public class VideoWallApplication : IDisposable
 {
 	private const int MaxFramesInFlight = 2;
-	private const int WIDTH = 800;
-	private const int HEIGHT = 600;
 
-	private readonly string[] ValidationLayers = new[] {
+	private readonly string[] ValidationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
 	public bool EnableValidationLayers = true;
@@ -61,8 +59,8 @@ public class VideoWallApplication : IDisposable
 
 	private Texture? depth;
 
-	public VideoWallApplication() {
-		window = new Window("VideoWall", WIDTH, HEIGHT);
+	public VideoWallApplication(int width, int height) {
+		window = new Window("VideoWall", width, height);
 		if (window.VkSurface is null)
 		{
 			throw new Exception("Windowing platform doesn't support Vulkan.");
@@ -105,7 +103,6 @@ public class VideoWallApplication : IDisposable
 		
 		var sampler = CreateTextureSampler(physicalDevice, device);
 
-		CreateUniformBuffers(device);
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
 
@@ -165,19 +162,6 @@ public class VideoWallApplication : IDisposable
 			MaxLod = 0
 		});
 	}
-
-	private unsafe void CreateUniformBuffers(VulkanDevice device) {
-		var bufferSize = (uint)sizeof(UniformBufferObject);
-
-		for (var i = 0; i < MaxFramesInFlight; i++) {
-			var frame = renderFrames[i];
-
-			frame.UniformBuffer = new BufferMemory(device, bufferSize,
-				BufferUsageFlags.UniformBufferBit,
-				MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-		}
-	}
-
 
 	private VulkanInstance CreateInstance() {
 		if (EnableValidationLayers && !CheckValidationLayerSupport()) {
@@ -677,8 +661,7 @@ public class VideoWallApplication : IDisposable
 		};
 		
 		foreach (var entity in _entities) {
-			var renderFrame = renderFrames[currentFrame];
-			var set = manager.UpdateDescriptorSet((uint)currentFrame, renderFrame.UniformBuffer!, entity.Texture!.ImageView, sampler);
+			var set = manager.UpdateDescriptorSet((uint)currentFrame, entity.UniformBuffer!, entity.Texture!.ImageView, sampler);
 
 			cmd.BindVertexBuffer(0, entity.VertexBuffer!);
 			cmd.BindIndexBuffer(entity.IndexBuffer!, 0, IndexType.Uint32);
@@ -726,12 +709,12 @@ public class VideoWallApplication : IDisposable
 			if (!entity.Initialized) {
 				entity.Initialize(appState.Device, appState.GraphicsQueue, appState.CommandPool);
 			}
-			entity.Texture!.UpdateTextureImage(appState.GraphicsQueue, appState.CommandPool, entity.Image);
+
+			entity.Update(appState.GraphicsQueue, appState.CommandPool, swapchainExtent);
 		}
 
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
 							appState.GraphicsPipeline, appState.DescriptorManager, appState.Sampler);
-		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;
 		var signalSemaphores = new[] { frame.RenderFinishedSemaphore!.Semaphore };
@@ -771,28 +754,6 @@ public class VideoWallApplication : IDisposable
 			return;
 		}
 		currentFrame = (currentFrame + 1) % MaxFramesInFlight;
-	}
-
-	private const float Circle = 2 * MathF.PI; 
-
-	private unsafe void UpdateUniformBuffer(int frame) {
-		UniformBufferObject ubo = new()
-		{
-			model = Matrix4X4<float>.Identity,
-			view = Matrix4X4.CreateLookAt(
-				new Vector3D<float>(0, 0, -3), 
-				new Vector3D<float>(0, 0, 0), 
-				new Vector3D<float>(0, -1, 0)),
-			proj = Matrix4X4.CreatePerspectiveFieldOfView(Circle / 8, 
-				swapchainExtent.Width / (float)swapchainExtent.Height, 
-				0.1f, 10.0f),
-		};
-		ubo.proj.M22 *= -1;
-
-		var memory = renderFrames[frame].UniformBuffer!;
-		var data = memory.MapMemory<UniformBufferObject>(0, (uint)sizeof(UniformBufferObject));
-		data[0] = ubo;
-		memory.UnmapMemory();
 	}
 
 	public void Dispose() {

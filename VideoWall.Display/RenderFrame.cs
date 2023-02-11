@@ -1,4 +1,3 @@
-using Illustrate;
 using SilkNetConvenience.Barriers;
 using SilkNetConvenience.CommandBuffers;
 
@@ -9,6 +8,4 @@ public class RenderFrame {
 	public VulkanSemaphore? ImageAvailableSemaphore;
 	public VulkanSemaphore? RenderFinishedSemaphore;
 	public VulkanFence? InFlightFence;
-
-	public BufferMemory? UniformBuffer;
 }

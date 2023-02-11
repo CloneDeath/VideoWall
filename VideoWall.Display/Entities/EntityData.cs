@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using Illustrate;
+using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
@@ -11,14 +12,13 @@ using Image = SixLabors.ImageSharp.Image;
 namespace VideoWall.Display.Entities; 
 
 public class EntityData {
-	public Guid Id { get; } = Guid.NewGuid();
 	public bool Initialized { get; private set; }
 	
 	private readonly IEntity _entity;
 	
 	public BufferMemory? VertexBuffer;
 	public BufferMemory? IndexBuffer;
-	
+	public BufferMemory? UniformBuffer;
 	public Texture? Texture;
 
 	public EntityData(IEntity entity) {
@@ -27,14 +27,15 @@ public class EntityData {
 
 	public uint[] Indices => _entity.Indices;
 	public Vertex[] Vertices => _entity.Vertices;
-	public Image Image => _entity.Image;
-	public Extent2D ImageSize => new((uint)Image.Width, (uint)Image.Height);
+	
+	protected Image Image => _entity.Image;
+	protected Extent2D ImageSize => new((uint)Image.Width, (uint)Image.Height);
 
 	public void Initialize(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
 		Texture = new Texture(device, ImageSize,
 			Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit);
-
+		CreateUniformBuffer(device);
 		CreateVertexBuffer(device, graphicsQueue, commandPool);
 		CreateIndexBuffer(device, graphicsQueue, commandPool);
 		Initialized = true;
@@ -73,11 +74,39 @@ public class EntityData {
 
 		CopyBuffer(graphicsQueue, commandPool, stagingBuffer, IndexBuffer, bufferSize);
 	}
+	
+	private unsafe void CreateUniformBuffer(VulkanDevice device) {
+		var bufferSize = (uint)sizeof(UniformBufferObject);
+		UniformBuffer = new BufferMemory(device, bufferSize,
+			BufferUsageFlags.UniformBufferBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+	}
 
 	private static void CopyBuffer(VulkanQueue graphicsQueue, VulkanCommandPool commandPool, 
 								   VulkanBuffer source, VulkanBuffer destination, uint size) {
 		graphicsQueue.SubmitSingleUseCommandBufferAndWaitIdle(commandPool, buffer => {
 			buffer.CopyBuffer(source, destination, size);
 		});
+	}
+
+	public void Update(VulkanQueue graphicsQueue, VulkanCommandPool commandPool, Extent2D windowSize) {
+		Texture!.UpdateTextureImage(graphicsQueue, commandPool, Image);
+		UpdateUniformBuffer(windowSize);
+	}
+	private void UpdateUniformBuffer(Extent2D windowSize) {
+		UniformBufferObject ubo = new()
+		{
+			model = _entity.Model,
+			view = Matrix4X4.CreateLookAt(
+				new Vector3D<float>(windowSize.Width/2f, windowSize.Height/2f, -10), 
+				new Vector3D<float>(windowSize.Width/2f, windowSize.Height/2f, 0), 
+				new Vector3D<float>(0, -1, 0)),
+			proj = Matrix4X4.CreateOrthographic(windowSize.Width, windowSize.Height, 0.1f, 100f),
+		};
+		ubo.proj.M22 *= -1;
+
+		var data = UniformBuffer!.MapMemory<UniformBufferObject>();
+		data[0] = ubo;
+		UniformBuffer!.UnmapMemory();
 	}
 }

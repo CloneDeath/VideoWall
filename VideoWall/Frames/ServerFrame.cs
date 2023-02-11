@@ -14,7 +14,7 @@ public class ServerFrame : IFrame {
 	public Location Location => new() {
 		X = _frame.Position.X,
 		Y = _frame.Position.Y,
-		Width = 1,
-		Height = 1
+		Width = _frame.Size.X,
+		Height = _frame.Size.Y
 	};
 }

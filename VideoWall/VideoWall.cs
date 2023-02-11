@@ -14,8 +14,8 @@ public class VideoWall : IVideoWall, IDisposable {
 
 	public IEnumerable<IFrame> Frames => _frames.Select(f => new ServerFrame(f));
 
-	public VideoWall() {
-		_app = new VideoWallApplication();
+	public VideoWall(int width, int height) {
+		_app = new VideoWallApplication(width, height);
 	}
 	~VideoWall() => Dispose();
 	public void Dispose() {
