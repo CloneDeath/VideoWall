@@ -3,15 +3,15 @@
         <TargetFramework>net6.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+        <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="7.0.2" />
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="Silk.NET.Maths">
-        <HintPath>..\..\..\..\.nuget\packages\silk.net.maths\2.16.0\lib\net5.0\Silk.NET.Maths.dll</HintPath>
-      </Reference>
+        <EmbeddedResource Include="resources\**\*" />
     </ItemGroup>
 </Project>

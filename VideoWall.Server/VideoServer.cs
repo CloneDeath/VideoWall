@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using VideoWall.Server.Controllers;
 
@@ -31,6 +32,13 @@ public class VideoServer {
 		}
 
 		_app.UseHttpsRedirection();
+		// _app.UseDefaultFiles();
+		_app.UseStaticFiles(new StaticFileOptions
+		{
+			FileProvider = new ManifestEmbeddedFileProvider(GetType().Assembly, "resources"),
+			RequestPath = ""
+		});
+
 		_app.UseAuthorization();
 		_app.MapControllers();
 		return _app.RunAsync();

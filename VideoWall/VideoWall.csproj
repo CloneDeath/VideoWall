@@ -37,5 +37,4 @@
       <ProjectReference Include="..\VideoWall.Display\VideoWall.Display.csproj" />
       <ProjectReference Include="..\VideoWall.Server\VideoWall.Server.csproj" />
     </ItemGroup>
-
 </Project>

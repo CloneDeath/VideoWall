@@ -50,10 +50,10 @@ foreach (var data in frameData) {
 	camera.Start();
 }
 videoWall.Init();
-var wallTask = videoWall.Run();
 
 var server = new VideoServer(videoWall);
 var _ = server.Start();
+var wallTask = videoWall.Run();
 
 await wallTask;
 
