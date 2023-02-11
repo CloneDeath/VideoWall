@@ -12,5 +12,5 @@ public class VideoWallController : ControllerBase {
 	}
 
 	[HttpGet]
-	public IEnumerable<IFrame> GetFrames() => _wall.Frames;
+	public IEnumerable<IFrame> Frames() => _wall.Frames;
 }

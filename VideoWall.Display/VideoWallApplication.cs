@@ -710,7 +710,7 @@ public class VideoWallApplication : IDisposable
 				entity.Initialize(appState.Device, appState.GraphicsQueue, appState.CommandPool);
 			}
 
-			entity.Update(appState.GraphicsQueue, appState.CommandPool, swapchainExtent);
+			entity.Update(appState.Device, appState.GraphicsQueue, appState.CommandPool, swapchainExtent);
 		}
 
 		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,

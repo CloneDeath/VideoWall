@@ -32,15 +32,19 @@ public class EntityData {
 	protected Extent2D ImageSize => new((uint)Image.Width, (uint)Image.Height);
 
 	public void Initialize(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		Texture = new Texture(device, ImageSize,
-			Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit);
+		CreateTexture(device);
 		CreateUniformBuffer(device);
 		CreateVertexBuffer(device, graphicsQueue, commandPool);
 		CreateIndexBuffer(device, graphicsQueue, commandPool);
 		Initialized = true;
 	}
-	
+
+	private void CreateTexture(VulkanDevice device) {
+		Texture = new Texture(device, ImageSize,
+			Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit);
+	}
+
 	private void CreateVertexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
 		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * Vertices.Length);
 		
@@ -89,7 +93,10 @@ public class EntityData {
 		});
 	}
 
-	public void Update(VulkanQueue graphicsQueue, VulkanCommandPool commandPool, Extent2D windowSize) {
+	public void Update(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool, Extent2D windowSize) {
+		if (Texture!.Size.Width != ImageSize.Width || Texture!.Size.Height != ImageSize.Height) {
+			CreateTexture(device);
+		}
 		Texture!.UpdateTextureImage(graphicsQueue, commandPool, Image);
 		UpdateUniformBuffer(windowSize);
 	}
