@@ -5,7 +5,9 @@ const api = new Api();
 const frames = await api.getFrames();
 
 const frameContainer = new FrameContainer("frame-container");
+frameContainer.setSize(800, 600);
+
 frameContainer.clear();
-frames.forEach(f => {
-    frameContainer.addFrame(f);
+frames.forEach(async f => {
+    await frameContainer.addFrame(f);
 });
