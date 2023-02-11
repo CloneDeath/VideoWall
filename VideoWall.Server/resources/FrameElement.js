@@ -2,7 +2,7 @@ export class FrameElement {
     constructor(frame) {
         this.frame = frame;
         this.element = document.createElement("canvas");
-        this.element.style.position = "absolute";
+        this.element.classList.add("frame");
     }
 
     get context() { return this.element.getContext("2d"); }

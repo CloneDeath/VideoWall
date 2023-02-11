@@ -1,0 +1,9 @@
+.frame {
+    position: absolute;
+    cursor: grab;
+}
+
+.frame:hover {
+    outline: 3px dashed black;
+    z-index: 1000;
+}
