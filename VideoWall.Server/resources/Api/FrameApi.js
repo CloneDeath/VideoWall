@@ -9,4 +9,9 @@ export class FrameApi {
     get width() { return this.frameData.location.width; }
     get height() { return this.frameData.location.height; }
     get image() { return this.frameData.image; }
+    
+    async update() {
+        const response = await fetch(`VideoWall/Frames/${this.id}`);
+        this.frameData = await response.json()
+    }
 }

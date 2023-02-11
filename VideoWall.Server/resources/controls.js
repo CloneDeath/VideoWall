@@ -6,8 +6,12 @@ const frames = await api.getFrames();
 
 const frameContainer = new FrameContainer("frame-container");
 frameContainer.setSize(800, 600);
-
 frameContainer.clear();
+
 frames.forEach(async f => {
-    await frameContainer.addFrame(f);
+    frameContainer.addFrame(f);
 });
+
+setInterval(async() => {
+    await frameContainer.update();
+}, 1000);
