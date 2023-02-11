@@ -2,6 +2,7 @@
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall;
+using VideoWall.Frames;
 using VideoWall.Server;
 
 var ipCams = new[] {
@@ -24,13 +25,13 @@ var positions = new[] {
 	new Vector3D<float>(0, 0, 0)
 };
 
-var frames = new List<Frame>();
+var frames = new List<DisplayFrame>();
 var cameraStreams = new List<CameraStream>();
 
 foreach (var ipCam in ipCams) {
 	var cam = new CameraStream(ipCam);
 	var img = await cam.GetSingleImage();
-	var cameraFrame = new Frame(new Vector3D<float>(-1, -1, 0), Image.Load(img));
+	var cameraFrame = new DisplayFrame(new Vector3D<float>(-1, -1, 0), Image.Load(img));
 	cam.JpegReceived += d => cameraFrame.Image = Image.Load(d);
 	cam.Start();
 	frames.Add(cameraFrame);

@@ -2,17 +2,16 @@ using System;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall.Display;
-using VideoWall.Server.Controllers;
 
-namespace VideoWall; 
+namespace VideoWall.Frames; 
 
-public class Frame : IEntity, IFrame {
+public class DisplayFrame : IEntity {
 	public Guid Id { get; } = Guid.NewGuid();
 	public Vector3D<float> Position { get; set; }
 
 	public Image Image { get; set; }
 
-	public Frame(Vector3D<float> position, Image image) {
+	public DisplayFrame(Vector3D<float> position, Image image) {
 		Position = position;
 		Image = image;
 	}
