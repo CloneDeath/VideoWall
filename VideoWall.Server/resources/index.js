@@ -1,6 +1,8 @@
 import {FrameContainer} from "./FrameContainer.js";
 import {Api} from "./Api/Api.js";
 
+document.addEventListener('dragover', function(e) { e.preventDefault() })
+
 const api = new Api();
 const frames = await api.getFrames();
 

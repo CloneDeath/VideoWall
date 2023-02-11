@@ -13,8 +13,8 @@ export class FrameContainer {
     }
 
     setSize(width, height) {
-        this.element.width = width;
-        this.element.height = height;
+        this.element.style.width = `${width}px`;
+        this.element.style.height = `${height}px`;
     }
 
     addFrame(frame) {

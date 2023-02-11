@@ -14,4 +14,14 @@ export class FrameApi {
         const response = await fetch(`VideoWall/Frames/${this.id}`);
         this.frameData = await response.json()
     }
+    
+    async updatePosition(x, y) {
+        this.frameData.location.x = x;
+        this.frameData.location.y = y;
+        const response = await fetch(`VideoWall/Frames/${this.id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(this.frameData.location)
+        });
+    }
 }

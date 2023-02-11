@@ -1,0 +1,6 @@
+.frameContainer {
+    position: absolute; 
+    top: 10px; 
+    left: 10px;
+    background-color: black;
+}
