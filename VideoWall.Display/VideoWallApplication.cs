@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Illustrate;
 using Silk.NET.Core.Native;
@@ -105,16 +104,7 @@ public class VideoWallApplication : IDisposable
 		CreateFramebuffers(device, renderPass);
 		
 		var sampler = CreateTextureSampler(physicalDevice, device);
-		
-		foreach (var entity in _entities) {
-			entity.Texture = new Texture(device, entity.ImageSize,
-				Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
-				MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit);
 
-			CreateVertexBuffer(entity, device, graphicsQueue, commandPool);
-			CreateIndexBuffer(entity, device, graphicsQueue, commandPool);
-		}
-		
 		CreateUniformBuffers(device);
 		CreateCommandBuffers(commandPool);
 		CreateSyncObjects(device);
@@ -242,7 +232,7 @@ public class VideoWallApplication : IDisposable
 		instance.DebugUtils.CreateDebugUtilsMessenger(createInfo);
 	}
 
-	private unsafe static void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
+	private static unsafe void PopulateDebugMessengerCreateInfo(ref DebugUtilsMessengerCreateInformation createInfo) {
 		createInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt
 		                             | DebugUtilsMessageSeverityFlagsEXT.WarningBitExt;
 		createInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.GeneralBitExt
@@ -636,47 +626,6 @@ public class VideoWallApplication : IDisposable
 		return device.CreateCommandPool(commandPoolCreateInfo);
 	}
 
-	private void CreateVertexBuffer(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * entity.Vertices.Length);
-		
-		using var stagingBuffer = new BufferMemory(device, bufferSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-		
-		var data = stagingBuffer.MapMemory<Vertex>();
-		entity.Vertices.AsSpan().CopyTo(data);
-		stagingBuffer.UnmapMemory();
-
-		entity.VertexBuffer = new BufferMemory(device, bufferSize,
-			BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
-			MemoryPropertyFlags.DeviceLocalBit);
-
-		CopyBuffer(graphicsQueue, stagingBuffer, entity.VertexBuffer, bufferSize, commandPool);
-	}
-
-	private void CreateIndexBuffer(EntityData entity, VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		var bufferSize =  sizeof(int) * (uint)entity.Indices.Length;
-
-		using var stagingBuffer = new BufferMemory(device, bufferSize, BufferUsageFlags.TransferSrcBit,
-			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
-
-		var data = stagingBuffer.MapMemory<uint>();
-		entity.Indices.AsSpan().CopyTo(data);
-		stagingBuffer.UnmapMemory();
-
-		entity.IndexBuffer = new BufferMemory(device, bufferSize,
-			BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
-			MemoryPropertyFlags.DeviceLocalBit);
-
-		CopyBuffer(graphicsQueue, stagingBuffer, entity.IndexBuffer, bufferSize, commandPool);
-	}
-
-	private void CopyBuffer(VulkanQueue graphicsQueue, VulkanBuffer source, VulkanBuffer destination, uint size,
-							VulkanCommandPool commandPool) {
-		graphicsQueue.SubmitSingleUseCommandBufferAndWaitIdle(commandPool, buffer => {
-			buffer.CopyBuffer(source, destination, size);
-		});
-	}
-
 	private void CreateCommandBuffers(VulkanCommandPool commandPool) {
 		var commandBuffers = commandPool.AllocateCommandBuffers((uint)renderFrames.Length);
 
@@ -772,14 +721,16 @@ public class VideoWallApplication : IDisposable
 		}
 
 		frame.InFlightFence.Reset();
-
 		frame.CommandBuffer!.Reset();
-		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
-							appState.GraphicsPipeline, appState.DescriptorManager, appState.Sampler);
-
 		foreach (var entity in _entities) {
+			if (!entity.Initialized) {
+				entity.Initialize(appState.Device, appState.GraphicsQueue, appState.CommandPool);
+			}
 			entity.Texture!.UpdateTextureImage(appState.GraphicsQueue, appState.CommandPool, entity.Image);
 		}
+
+		RecordCommandBuffer(frame.CommandBuffer, (int)imageIndex, appState.RenderPass, appState.PipelineLayout,
+							appState.GraphicsPipeline, appState.DescriptorManager, appState.Sampler);
 		UpdateUniformBuffer(currentFrame);
 
 		var buffer = frame.CommandBuffer;
