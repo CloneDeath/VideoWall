@@ -8,4 +8,5 @@ export class FrameApi {
     get y() { return this.frameData.location.y; }
     get width() { return this.frameData.location.width; }
     get height() { return this.frameData.location.height; }
+    get image() { return this.frameData.image; }
 }

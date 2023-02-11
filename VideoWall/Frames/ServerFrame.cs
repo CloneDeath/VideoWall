@@ -1,5 +1,6 @@
 using System;
 using Silk.NET.Maths;
+using SixLabors.ImageSharp;
 using VideoWall.Server.Controllers;
 
 namespace VideoWall.Frames; 
@@ -24,4 +25,5 @@ public class ServerFrame : IFrame {
 			_frame.Size = new Vector2D<float>(value.Width, value.Height);
 		}
 	}
+	public Image Image => _frame.Image;
 }

@@ -12,10 +12,10 @@ public class FramesController : ControllerBase {
 	}
 
 	[HttpGet]
-	public IEnumerable<IFrame> AllFrames() => _wall.Frames;
+	public IEnumerable<FrameData> AllFrames() => _wall.Frames.Select(f => new FrameData(f));
 
 	[HttpGet("{id:guid}")]
-	public IFrame? GetFrame(Guid id) => _wall.Frames.FirstOrDefault(f => f.Id == id);
+	public FrameData? GetFrame(Guid id) => AllFrames().FirstOrDefault(f => f.Id == id);
 
 	[HttpPut("{id:guid}")]
 	public void SetFrameLocation(Guid id, [FromBody] Location location) {
