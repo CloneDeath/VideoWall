@@ -7,6 +7,7 @@ namespace VideoWall.Server;
 
 public class VideoServer {
 	private readonly IVideoWall _wall;
+	private WebApplication? _app;
 
 	public VideoServer(IVideoWall wall) {
 		_wall = wall;
@@ -22,17 +23,20 @@ public class VideoServer {
 		builder.Services.AddSwaggerGen();
 		builder.Services.AddSingleton(_wall);
 
-		var app = builder.Build();
-
-		if (app.Environment.IsDevelopment()) {
-			app.UseDeveloperExceptionPage();
-			app.UseSwagger();
-			app.UseSwaggerUI();
+		_app = builder.Build();
+		if (_app.Environment.IsDevelopment()) {
+			_app.UseDeveloperExceptionPage();
+			_app.UseSwagger();
+			_app.UseSwaggerUI();
 		}
 
-		app.UseHttpsRedirection();
-		app.UseAuthorization();
-		app.MapControllers();
-		return app.RunAsync();
+		_app.UseHttpsRedirection();
+		_app.UseAuthorization();
+		_app.MapControllers();
+		return _app.RunAsync();
+	}
+
+	public ValueTask Stop() {
+		return _app?.DisposeAsync() ?? ValueTask.CompletedTask;
 	}
 }

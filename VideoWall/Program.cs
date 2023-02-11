@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Threading.Tasks;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall;
@@ -49,12 +48,14 @@ for (var index = 0; index < frames.Count; index++) {
 //app.AddEntity(new Frame(new Vector3D<float>(0, 0, 0), Image.Load("textures/texture.jpg")));
 //app.AddEntity(new Frame(new Vector3D<float>(1, 0, 0), Image.Load("textures/bird.png")));
 videoWall.Init();
-//var wallTask = videoWall.Run();
+var wallTask = videoWall.Run();
 
 var server = new VideoServer(videoWall);
-var serverTask = server.Start();
+var _ = server.Start();
 
-Task.WaitAll(/*wallTask, */serverTask);
+await wallTask;
+
+await server.Stop();
 
 foreach (var stream in cameraStreams) {
 	stream.Stop();
