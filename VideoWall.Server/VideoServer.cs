@@ -23,6 +23,7 @@ public class VideoServer {
 		builder.Services.AddEndpointsApiExplorer();
 		builder.Services.AddSwaggerGen();
 		builder.Services.AddSingleton(_wall);
+		builder.WebHost.UseUrls("https://*:5001");
 
 		_app = builder.Build();
 		if (_app.Environment.IsDevelopment()) {
