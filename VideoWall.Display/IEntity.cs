@@ -1,3 +1,4 @@
+using Illustrate.DataObjects;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 

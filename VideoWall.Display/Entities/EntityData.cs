@@ -1,11 +1,11 @@
 using System;
 using System.Runtime.CompilerServices;
 using Illustrate;
+using Illustrate.DataObjects;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
-using SilkNetConvenience.Devices;
 using SilkNetConvenience.Queues;
 using Image = SixLabors.ImageSharp.Image;
 
@@ -31,59 +31,59 @@ public class EntityData {
 	protected Image Image => _entity.Image;
 	protected Extent2D ImageSize => new((uint)Image.Width, (uint)Image.Height);
 
-	public void Initialize(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
-		CreateTexture(device);
-		CreateUniformBuffer(device);
-		CreateVertexBuffer(device, graphicsQueue, commandPool);
-		CreateIndexBuffer(device, graphicsQueue, commandPool);
+	public void Initialize(GraphicsContext context, VulkanCommandPool commandPool) {
+		CreateTexture(context);
+		CreateUniformBuffer(context);
+		CreateVertexBuffer(context, commandPool);
+		CreateIndexBuffer(context, commandPool);
 		Initialized = true;
 	}
 
-	private void CreateTexture(VulkanDevice device) {
-		Texture = new Texture(device, ImageSize,
+	private void CreateTexture(GraphicsContext context) {
+		Texture = context.CreateTexture(ImageSize,
 			Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
 			MemoryPropertyFlags.DeviceLocalBit, ImageAspectFlags.ColorBit);
 	}
 
-	private void CreateVertexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+	private unsafe void CreateUniformBuffer(GraphicsContext context) {
+		var bufferSize = (uint)sizeof(UniformBufferObject);
+		UniformBuffer = context.CreateBufferMemory(bufferSize,
+			BufferUsageFlags.UniformBufferBit,
+			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+	}
+
+	private void CreateVertexBuffer(GraphicsContext context, VulkanCommandPool commandPool) {
 		var bufferSize = (uint)(Unsafe.SizeOf<Vertex>() * Vertices.Length);
 		
-		using var stagingBuffer = new BufferMemory(device, bufferSize, BufferUsageFlags.TransferSrcBit,
+		using var stagingBuffer = context.CreateBufferMemory(bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 		
 		var data = stagingBuffer.MapMemory<Vertex>();
 		Vertices.AsSpan().CopyTo(data);
 		stagingBuffer.UnmapMemory();
 
-		VertexBuffer = new BufferMemory(device, bufferSize,
+		VertexBuffer = context.CreateBufferMemory(bufferSize,
 			BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
 			MemoryPropertyFlags.DeviceLocalBit);
 
-		CopyBuffer(graphicsQueue, commandPool, stagingBuffer, VertexBuffer, bufferSize);
+		CopyBuffer(context.GraphicsQueue, commandPool, stagingBuffer, VertexBuffer, bufferSize);
 	}
 
-	private void CreateIndexBuffer(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool) {
+	private void CreateIndexBuffer(GraphicsContext context, VulkanCommandPool commandPool) {
 		var bufferSize =  sizeof(int) * (uint)Indices.Length;
 
-		using var stagingBuffer = new BufferMemory(device, bufferSize, BufferUsageFlags.TransferSrcBit,
+		using var stagingBuffer = context.CreateBufferMemory(bufferSize, BufferUsageFlags.TransferSrcBit,
 			MemoryPropertyFlags.HostCoherentBit | MemoryPropertyFlags.HostVisibleBit);
 
 		var data = stagingBuffer.MapMemory<uint>();
 		Indices.AsSpan().CopyTo(data);
 		stagingBuffer.UnmapMemory();
 
-		IndexBuffer = new BufferMemory(device, bufferSize,
+		IndexBuffer = context.CreateBufferMemory(bufferSize,
 			BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
 			MemoryPropertyFlags.DeviceLocalBit);
 
-		CopyBuffer(graphicsQueue, commandPool, stagingBuffer, IndexBuffer, bufferSize);
-	}
-	
-	private unsafe void CreateUniformBuffer(VulkanDevice device) {
-		var bufferSize = (uint)sizeof(UniformBufferObject);
-		UniformBuffer = new BufferMemory(device, bufferSize,
-			BufferUsageFlags.UniformBufferBit,
-			MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+		CopyBuffer(context.GraphicsQueue, commandPool, stagingBuffer, IndexBuffer, bufferSize);
 	}
 
 	private static void CopyBuffer(VulkanQueue graphicsQueue, VulkanCommandPool commandPool, 
@@ -93,11 +93,11 @@ public class EntityData {
 		});
 	}
 
-	public void Update(VulkanDevice device, VulkanQueue graphicsQueue, VulkanCommandPool commandPool, Extent2D windowSize) {
+	public void Update(GraphicsContext context, VulkanCommandPool commandPool, Extent2D windowSize) {
 		if (Texture!.Size.Width != ImageSize.Width || Texture!.Size.Height != ImageSize.Height) {
-			CreateTexture(device);
+			CreateTexture(context);
 		}
-		Texture!.UpdateTextureImage(graphicsQueue, commandPool, Image);
+		Texture!.UpdateTextureImage(context.GraphicsQueue, commandPool, Image);
 		UpdateUniformBuffer(windowSize);
 	}
 	private void UpdateUniformBuffer(Extent2D windowSize) {

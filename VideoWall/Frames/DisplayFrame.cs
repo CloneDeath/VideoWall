@@ -1,4 +1,5 @@
 using System;
+using Illustrate.DataObjects;
 using Silk.NET.Maths;
 using SixLabors.ImageSharp;
 using VideoWall.Display;
