@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Illustrate;
 using Illustrate.Factories;
+using Illustrate.Shaders;
 using Silk.NET.Vulkan;
 using SilkNetConvenience.Buffers;
 using SilkNetConvenience.CommandBuffers;
@@ -66,11 +67,20 @@ public class VideoWallApplication : IDisposable
 		}
 
 		CreateSwapchain();
-		
-		var vertShaderCode = File.ReadAllBytes("shaders/vert.spv");
-		var fragShaderCode = File.ReadAllBytes("shaders/frag.spv");
-		var graphicsPipeline = context.CreateGraphicsPipeline(vertShaderCode, fragShaderCode, 
-			_swapchainContext!.ColorFormat, _swapchainContext.OutputSize);
+
+		var stages = new[] {
+			new ShaderStage {
+				Code = File.ReadAllBytes("shaders/vert.spv"),
+				EntryPoint = "main",
+				Stage = ShaderStageFlags.VertexBit
+			},
+			new ShaderStage {
+				Code = File.ReadAllBytes("shaders/frag.spv"),
+				EntryPoint = "main",
+				Stage = ShaderStageFlags.FragmentBit
+			}
+		};
+		var graphicsPipeline = context.CreateGraphicsPipeline(stages, _swapchainContext!.ColorFormat, _swapchainContext.OutputSize);
 		
 		CreateDepthResources(commandPool);
 		CreateFramebuffers(graphicsPipeline);
