@@ -68,19 +68,33 @@ public class VideoWallApplication : IDisposable
 
 		CreateSwapchain();
 
-		var stages = new[] {
-			new ShaderStage {
-				Code = File.ReadAllBytes("shaders/vert.spv"),
-				EntryPoint = "main",
-				Stage = ShaderStageFlags.VertexBit
+		var pipelineDetails = new PipelineDetails {
+			UniformDetails = new IUniformDetails[] {
+				new UniformDetails {
+					Stages = ShaderStageFlags.VertexBit,
+					Binding = 0,
+					Type = DescriptorType.UniformBuffer
+				},
+				new UniformDetails {
+					Stages = ShaderStageFlags.FragmentBit,
+					Binding = 1,
+					Type = DescriptorType.CombinedImageSampler
+				}
 			},
-			new ShaderStage {
-				Code = File.ReadAllBytes("shaders/frag.spv"),
-				EntryPoint = "main",
-				Stage = ShaderStageFlags.FragmentBit
+			Stages = new IShaderStage[] {
+				new ShaderStage {
+					Code = File.ReadAllBytes("shaders/vert.spv"),
+					EntryPoint = "main",
+					Stage = ShaderStageFlags.VertexBit
+				},
+				new ShaderStage {
+					Code = File.ReadAllBytes("shaders/frag.spv"),
+					EntryPoint = "main",
+					Stage = ShaderStageFlags.FragmentBit
+				}
 			}
 		};
-		var graphicsPipeline = context.CreateGraphicsPipeline(stages, _swapchainContext!.ColorFormat, _swapchainContext.OutputSize);
+		var graphicsPipeline = context.CreateGraphicsPipeline(pipelineDetails, _swapchainContext!.ColorFormat, _swapchainContext.OutputSize);
 		
 		CreateDepthResources(commandPool);
 		CreateFramebuffers(graphicsPipeline);
@@ -131,14 +145,15 @@ public class VideoWallApplication : IDisposable
 												 .ToArray();
 	}
 
-	private void RecordCommandBuffer(VulkanCommandBuffer cmd, VulkanFramebuffer framebuffer, 
+	private unsafe void RecordCommandBuffer(VulkanCommandBuffer cmd, VulkanFramebuffer framebuffer, 
 									 GraphicsPipelineContext graphicsPipeline, VulkanSampler sampler) {
 		cmd.Begin();
 		
-		graphicsPipeline.BeginRenderPass(cmd, framebuffer, sampler, _swapchainContext!.OutputSize);
+		graphicsPipeline.BeginRenderPass(cmd, framebuffer, _swapchainContext!.OutputSize);
 
 		foreach (var entity in _entities) {
-			var set = context.UpdateDescriptorSet((uint)currentFrame, entity.UniformBuffer!, entity.Texture!.ImageView, sampler);
+			var set = graphicsPipeline.UpdateDescriptorSet((uint)currentFrame, entity.UniformBuffer!, 
+				entity.Texture!.ImageView, sampler, (uint)sizeof(UniformBufferObject));
 
 			cmd.BindVertexBuffer(0, entity.VertexBuffer!);
 			cmd.BindIndexBuffer(entity.IndexBuffer!, 0, IndexType.Uint32);
